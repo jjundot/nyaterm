@@ -1,6 +1,7 @@
-# Dragonfly
-
-Dragonfly is a modern, high-performance SSH client and terminal emulator built with **Tauri**, **React**, and **Rust**. It combines the web's flexibility with the system's performance to provide a robust tool for managing remote connections.
+<div align="center">
+    <img src="./public/dragonfly.svg" alt="Dragonfly Logo" width="100" height="100">
+    <h3>Dragonfly is a modern, high-performance SSH client.</h3>
+</div>
 
 ## ✨ Features
 
