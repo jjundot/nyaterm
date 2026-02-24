@@ -15,4 +15,9 @@ i18n.use(initReactI18next).init({
   },
 });
 
+export const AVAILABLE_LANGUAGES = [
+  { id: "en", name: "English" },
+  { id: "zh-CN", name: "中文 (简体)" },
+];
+
 export default i18n;

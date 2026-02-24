@@ -157,28 +157,43 @@ pub fn save_config(app: &AppHandle, config: &AppConfig) -> AppResult<()> {
 
 // ── ui.json ────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RestorableTab {
+    pub title: String,
+    pub session_type: String,
+    pub connection_id: Option<String>,
+}
+
 /// Layout and theme preferences persisted in ui.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UiConfig {
+    #[serde(default)]
+    pub open_tabs: Vec<RestorableTab>,
     pub left_width: f64,
     pub right_width: f64,
     pub saved_conn_height: f64,
     pub history_height: f64,
     pub quick_cmd_height: f64,
     pub show_file_explorer: bool,
+    #[serde(default = "default_true")]
+    pub show_file_transfer: bool,
     pub show_saved_connections: bool,
     pub show_active_sessions: bool,
     pub show_command_history: bool,
     pub show_quick_commands: bool,
     pub zoom_level: f64,
-    #[serde(default = "default_theme")]
-    pub theme: Option<String>,
+    #[serde(default = "default_transfer_height")]
+    pub file_transfer_height: f64,
     #[serde(default = "default_language")]
     pub language: Option<String>,
 }
 
-fn default_theme() -> Option<String> {
-    Some("github-dark".to_string())
+fn default_true() -> bool {
+    true
+}
+
+fn default_transfer_height() -> f64 {
+    240.0
 }
 
 fn default_language() -> Option<String> {
@@ -188,18 +203,20 @@ fn default_language() -> Option<String> {
 impl Default for UiConfig {
     fn default() -> Self {
         Self {
+            open_tabs: vec![],
             left_width: 256.0,
             right_width: 288.0,
             saved_conn_height: 240.0,
             history_height: 200.0,
             quick_cmd_height: 36.0,
             show_file_explorer: true,
+            show_file_transfer: true,
             show_saved_connections: true,
             show_active_sessions: true,
             show_command_history: true,
             show_quick_commands: true,
             zoom_level: 1.0,
-            theme: Some("github-dark".to_string()),
+            file_transfer_height: 240.0,
             language: Some("en".to_string()),
         }
     }
@@ -244,3 +261,237 @@ pub fn save_quick_commands(app: &AppHandle, config: &QuickCommandsConfig) -> App
     let dir = get_config_dir(app)?;
     save_json(&dir.join("quick-command.json"), config)
 }
+
+// ── settings.json ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneralSettings {
+    #[serde(default = "default_true")]
+    pub startup_restore: bool,
+    #[serde(default = "default_shell")]
+    pub default_local_shell: String,
+    #[serde(default = "default_false")]
+    pub minimize_to_tray: bool,
+    #[serde(default)]
+    pub boss_key: Option<String>,
+}
+
+fn default_shell() -> String {
+    if cfg!(windows) { "powershell.exe".to_string() } else { "bash".to_string() }
+}
+fn default_false() -> bool { false }
+
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            startup_restore: true,
+            default_local_shell: default_shell(),
+            minimize_to_tray: false,
+            boss_key: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppearanceSettings {
+    #[serde(default = "default_app_theme")]
+    pub theme: String,
+    #[serde(default = "default_font")]
+    pub font_family: String,
+    #[serde(default = "default_font_size")]
+    pub font_size: f64,
+    #[serde(default = "default_false")]
+    pub ligatures: bool,
+    #[serde(default = "default_opacity")]
+    pub background_opacity: f64,
+    #[serde(default = "default_cursor_style")]
+    pub cursor_style: String,
+    #[serde(default = "default_true")]
+    pub cursor_blink: bool,
+}
+
+fn default_app_theme() -> String { "github-dark".to_string() }
+fn default_font() -> String { "JetBrains Mono, Fira Code, Consolas, monospace".to_string() }
+fn default_font_size() -> f64 { 14.0 }
+fn default_opacity() -> f64 { 1.0 }
+fn default_cursor_style() -> String { "block".to_string() }
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            theme: "github-dark".to_string(),
+            font_family: default_font(),
+            font_size: default_font_size(),
+            ligatures: false,
+            background_opacity: default_opacity(),
+            cursor_style: default_cursor_style(),
+            cursor_blink: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProxySettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub protocol: String,
+    #[serde(default)]
+    pub host: String,
+    #[serde(default)]
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SearchEngine {
+    pub name: String,
+    pub url_template: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchSettings {
+    #[serde(default = "default_search_engine")]
+    pub default_engine: String,
+    #[serde(default = "default_custom_engines")]
+    pub custom_engines: Vec<SearchEngine>,
+}
+
+fn default_search_engine() -> String {
+    "Google".to_string()
+}
+
+fn default_custom_engines() -> Vec<SearchEngine> {
+    vec![
+        SearchEngine {
+            name: "Google".to_string(),
+            url_template: "https://www.google.com/search?q=%s".to_string(),
+        },
+        SearchEngine {
+            name: "Bing".to_string(),
+            url_template: "https://www.bing.com/search?q=%s".to_string(),
+        },
+        SearchEngine {
+            name: "DuckDuckGo".to_string(),
+            url_template: "https://duckduckgo.com/?q=%s".to_string(),
+        },
+    ]
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        Self {
+            default_engine: default_search_engine(),
+            custom_engines: default_custom_engines(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TranslationSettings {
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecuritySettings {
+    #[serde(default = "default_true")]
+    pub use_os_keyring: bool,
+    #[serde(default = "default_false")]
+    pub require_master_password: bool,
+    #[serde(default)]
+    pub idle_lock_minutes: u32,
+    #[serde(default = "default_host_key_policy")]
+    pub host_key_policy: String,
+}
+
+fn default_host_key_policy() -> String { "prompt".to_string() }
+
+impl Default for SecuritySettings {
+    fn default() -> Self {
+        Self {
+            use_os_keyring: true,
+            require_master_password: false,
+            idle_lock_minutes: 0,
+            host_key_policy: default_host_key_policy(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalSettings {
+    #[serde(default = "default_scrollback")]
+    pub scrollback_lines: u32,
+    #[serde(default = "default_keep_alive")]
+    pub keep_alive_interval: u32,
+}
+
+fn default_scrollback() -> u32 { 10000 }
+fn default_keep_alive() -> u32 { 60 }
+
+impl Default for TerminalSettings {
+    fn default() -> Self {
+        Self {
+            scrollback_lines: default_scrollback(),
+            keep_alive_interval: default_keep_alive(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InteractionSettings {
+    #[serde(default = "default_true")]
+    pub copy_on_select: bool,
+    #[serde(default = "default_true")]
+    pub right_click_paste: bool,
+    #[serde(default = "default_word_separators")]
+    pub word_separators: String,
+    #[serde(default = "default_encoding")]
+    pub default_encoding: String,
+}
+
+fn default_word_separators() -> String { " ()[]{}\"'".to_string() }
+fn default_encoding() -> String { "UTF-8".to_string() }
+
+impl Default for InteractionSettings {
+    fn default() -> Self {
+        Self {
+            copy_on_select: true,
+            right_click_paste: true,
+            word_separators: default_word_separators(),
+            default_encoding: default_encoding(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AppSettings {
+    #[serde(default)]
+    pub general: GeneralSettings,
+    #[serde(default)]
+    pub appearance: AppearanceSettings,
+    #[serde(default)]
+    pub proxy: ProxySettings,
+    #[serde(default)]
+    pub search: SearchSettings,
+    #[serde(default)]
+    pub translation: TranslationSettings,
+    #[serde(default)]
+    pub security: SecuritySettings,
+    #[serde(default)]
+    pub terminal: TerminalSettings,
+    #[serde(default)]
+    pub interaction: InteractionSettings,
+}
+
+pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
+    let dir = get_config_dir(app)?;
+    load_json(&dir.join("settings.json"))
+}
+
+pub fn save_app_settings(app: &AppHandle, config: &AppSettings) -> AppResult<()> {
+    let dir = get_config_dir(app)?;
+    save_json(&dir.join("settings.json"), config)
+}
+
