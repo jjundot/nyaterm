@@ -6,196 +6,21 @@ import { openPath as openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  MdApps,
   MdArrowUpward,
-  MdArticle,
-  MdAudioFile,
-  MdCode,
-  MdContentCopy,
-  MdCoPresent,
-  MdCopyAll,
-  MdCss,
-  MdDataObject,
-  MdDelete,
-  MdDescription,
-  MdDownload,
-  MdDriveFileMove,
-  MdEdit,
-  MdFileOpen,
-  MdFolder,
-  MdFolderCopy,
   MdFolderOff,
-  MdFolderZip,
-  MdHtml,
-  MdImage,
-  MdInfo,
-  MdInsertDriveFile,
-  MdJavascript,
-  MdKeyboardArrowRight,
-  MdKeyboardDoubleArrowRight,
-  MdKeyboardReturn,
-  MdLock,
-  MdMovie,
-  MdOpenInNew,
-  MdPictureAsPdf,
   MdRefresh,
   MdSend,
-  MdSettings,
-  MdStorage,
-  MdTableChart,
-  MdTerminal,
-  MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
 import AutoUploadDialog, { type AutoUploadDialogData } from "../dialog/file-explorer/AutoUploadDialog";
 import MoveDialog, { type MoveDialogData } from "../dialog/file-explorer/MoveDialog";
 import PropertiesDialog, { type PropertiesDialogData } from "../dialog/file-explorer/PropertiesDialog";
 import RenameDialog, { type RenameDialogData } from "../dialog/file-explorer/RenameDialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "../ui/context-menu";
+import DeleteDialog, { type DeleteDialogData } from "../dialog/file-explorer/DeleteDialog";
 
-interface FileEntry {
-  name: string;
-  is_dir: boolean;
-  size: number;
-  permissions: string;
-}
-
-interface FileExplorerProps {
-  activeSessionId: string | null;
-}
-
-function getFileIcon(entry: FileEntry): { icon: React.ElementType; color: string } {
-  if (entry.is_dir) return { icon: MdFolder, color: "#fbbf24" }; // amber-400
-
-  const ext = entry.name.includes(".") ? (entry.name.split(".").pop()?.toLowerCase() ?? "") : "";
-
-  switch (ext) {
-    // --- Web & Scripting ---
-    case "js":
-    case "jsx":
-      return { icon: MdJavascript, color: "#facc15" }; // yellow-400
-    case "ts":
-    case "tsx":
-      return { icon: MdCode, color: "#60a5fa" }; // blue-400
-    case "html":
-    case "htm":
-      return { icon: MdHtml, color: "#f97316" }; // orange-500
-    case "css":
-    case "scss":
-    case "less":
-      return { icon: MdCss, color: "#38bdf8" }; // sky-400
-    case "py":
-    case "pyc":
-    case "sh":
-    case "bash":
-    case "zsh":
-    case "bat":
-    case "ps1":
-      return { icon: MdTerminal, color: "#4ade80" }; // green-400
-
-    case "rs":
-    case "go":
-    case "c":
-    case "cpp":
-    case "java":
-      return { icon: MdCode, color: "#f87171" }; // red-400
-
-    // --- Data & Config ---
-    case "json":
-    case "yaml":
-    case "yml":
-    case "toml":
-    case "xml":
-      return { icon: MdDataObject, color: "#a78bfa" }; // violet-400
-    case "ini":
-    case "env":
-    case "conf":
-    case "config":
-      return { icon: MdSettings, color: "var(--df-text-muted)" };
-    case "sql":
-    case "db":
-    case "sqlite":
-      return { icon: MdStorage, color: "#94a3b8" }; // slate-400
-
-    // --- Text & Documents ---
-    case "md":
-    case "mdx":
-    case "txt":
-    case "rtf":
-      return { icon: MdArticle, color: "var(--df-text-dimmed)" };
-    case "doc":
-    case "docx":
-      return { icon: MdDescription, color: "#3b82f6" }; // blue-500
-    case "pdf":
-      return { icon: MdPictureAsPdf, color: "#ef4444" }; // red-500
-    case "xls":
-    case "xlsx":
-    case "csv":
-      return { icon: MdTableChart, color: "#16a34a" }; // green-600
-    case "ppt":
-    case "pptx":
-      return { icon: MdCoPresent, color: "#ea580c" }; // orange-600
-
-    // --- Media ---
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "webp":
-    case "svg":
-    case "ico":
-      return { icon: MdImage, color: "#ec4899" }; // pink-500
-    case "mp4":
-    case "mkv":
-    case "avi":
-    case "mov":
-    case "webm":
-      return { icon: MdMovie, color: "#8b5cf6" }; // violet-500
-    case "mp3":
-    case "wav":
-    case "ogg":
-    case "flac":
-      return { icon: MdAudioFile, color: "#f59e0b" }; // amber-500
-
-    // --- Archives ---
-    case "zip":
-    case "rar":
-    case "7z":
-    case "tar":
-    case "gz":
-    case "bz2":
-    case "xz":
-      return { icon: MdFolderZip, color: "#f59e0b" }; // amber-500
-
-    // --- Misc ---
-    case "exe":
-    case "apk":
-    case "dmg":
-    case "iso":
-      return { icon: MdApps, color: "#14b8a6" }; // teal-500
-    case "lock":
-      return { icon: MdLock, color: "var(--df-text-muted)" };
-
-    default:
-      if (entry.name.startsWith(".")) {
-        return { icon: MdSettings, color: "var(--df-text-muted)" };
-      }
-      return { icon: MdInsertDriveFile, color: "var(--df-text-muted)" };
-  }
-}
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return "-";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+import { FileEntry, FileExplorerProps } from "./file-explorer/types";
+import { formatSize } from "./file-explorer/utils";
+import { FileListItem } from "./file-explorer/FileListItem";
 
 /** Remote file browser for active SSH session. Lists dirs/files, supports navigation. */
 export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
@@ -211,6 +36,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [renameDialogData, setRenameDialogData] = useState<RenameDialogData | null>(null);
+  const [deleteDialogData, setDeleteDialogData] = useState<DeleteDialogData | null>(null);
   const [moveDialogData, setMoveDialogData] = useState<MoveDialogData | null>(null);
   const [autoUploadDialogData, setAutoUploadDialogData] = useState<AutoUploadDialogData | null>(
     null,
@@ -351,7 +177,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
               sessionId: session_id,
               localPath: local_path,
               remotePath: remote_path,
-            }).catch((err) => alert(String(err)));
+            }).catch((err) => toast.error(String(err)));
             return prev;
           } else {
             setAutoUploadDialogData({
@@ -412,21 +238,13 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     emit(`focus-terminal-${activeSessionId}`);
   };
 
-  const handleDelete = async (entry: FileEntry) => {
+  const handleDelete = (entry: FileEntry) => {
     if (!activeSessionId) return;
-    if (window.confirm(t("fileExplorer.sureDelete", { name: entry.name }))) {
-      try {
-        setLoading(true);
-        await invoke("delete_remote_file", {
-          sessionId: activeSessionId,
-          path: getEntryFullPath(entry),
-        });
-        await loadDirectory(currentPath);
-      } catch (e) {
-        toast.error(String(e));
-        setLoading(false);
-      }
-    }
+    setDeleteDialogData({
+      sessionId: activeSessionId,
+      path: getEntryFullPath(entry),
+      name: entry.name,
+    });
   };
 
   const handleDownload = async (entry: FileEntry) => {
@@ -596,152 +414,50 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
           </div>
         ) : (
           <ul className="space-y-0.5">
-            {files.map((entry) => {
-              const entryIcon = getFileIcon(entry);
-              const isSelected = selectedFile === entry.name;
-              return (
-                <ContextMenu key={entry.name}>
-                  <ContextMenuTrigger asChild>
-                    <li
-                      className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer transition-colors"
-                      style={{
-                        backgroundColor: isSelected
-                          ? "color-mix(in srgb, var(--df-primary) 10%, transparent)"
-                          : undefined,
-                        color: isSelected ? "var(--df-primary)" : "var(--df-text)",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected)
-                          e.currentTarget.style.backgroundColor = "var(--df-bg-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = "";
-                      }}
-                      onClick={() => handleItemClick(entry)}
-                      onDoubleClick={() => {
-                        if (!entry.is_dir) {
-                          handleOpenDefault(entry);
-                        }
-                      }}
-                      onContextMenu={() => setSelectedFile(entry.name)}
-                      title={`${entry.permissions} ${formatSize(entry.size)}`}
-                    >
-                      <entryIcon.icon
-                        className="text-base"
-                        style={{ color: isSelected ? "var(--df-primary)" : entryIcon.color }}
-                      />
-                      <span className="flex-1 truncate text-xs">{entry.name}</span>
-                      {!entry.is_dir && (
-                        <span className="text-[0.625rem]" style={{ color: "var(--df-text-dimmed)" }}>
-                          {formatSize(entry.size)}
-                        </span>
-                      )}
-                    </li>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="min-w-[200px]">
-                    <ContextMenuItem onClick={() => handleItemClick(entry)}>
-                      <MdFileOpen className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmOpen")}
-                    </ContextMenuItem>
-                    {!entry.is_dir && (
-                      <ContextMenuItem onClick={() => handleOpenDefault(entry)}>
-                        <MdOpenInNew className="text-[0.875rem] text-muted-foreground mr-2" />
-                        {t("fileExplorer.cmOpenDefault")}
-                      </ContextMenuItem>
-                    )}
-                    <ContextMenuSeparator />
-                    <ContextMenuItem onClick={() => loadDirectory(currentPath)}>
-                      <MdRefresh className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmRefresh")}
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleUpload()}>
-                      <MdUpload className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmUpload")}
-                    </ContextMenuItem>
-                    {!entry.is_dir && (
-                      <ContextMenuItem onClick={() => handleDownload(entry)}>
-                        <MdDownload className="text-[0.875rem] text-muted-foreground mr-2" />
-                        {t("fileExplorer.cmDownload")}
-                      </ContextMenuItem>
-                    )}
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onClick={() => {
-                        if (activeSessionId)
-                          setRenameDialogData({
-                            sessionId: activeSessionId,
-                            oldPath: getEntryFullPath(entry),
-                            name: entry.name,
-                            currentDirPath: currentPath,
-                          });
-                      }}
-                    >
-                      <MdEdit className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmRename")}
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => {
-                        if (activeSessionId)
-                          setMoveDialogData({
-                            sessionId: activeSessionId,
-                            oldPath: getEntryFullPath(entry),
-                            name: entry.name,
-                          });
-                      }}
-                    >
-                      <MdDriveFileMove className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmMove")}
-                    </ContextMenuItem>
-                    <ContextMenuItem variant="destructive" onClick={() => handleDelete(entry)}>
-                      <MdDelete className="text-[0.875rem] mr-2" />
-                      {t("fileExplorer.cmDelete")}
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem onClick={() => handleCopyPath(entry, "full")}>
-                      <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmCopyPath")}
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleCopyPath(entry, "name")}>
-                      <MdCopyAll className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmCopyName")}
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleCopyPath(entry, "dir")}>
-                      <MdFolderCopy className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmCopyDirPath")}
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem onClick={() => handleSendToTerminal(entry, "full")}>
-                      <MdKeyboardReturn className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmTerminalPath")}
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleSendToTerminal(entry, "name")}>
-                      <MdKeyboardArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmTerminalName")}
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => handleSendToTerminal(entry, "dir")}>
-                      <MdKeyboardDoubleArrowRight className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmTerminalDirPath")}
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onClick={() => {
-                        if (activeSessionId) {
-                          setPropertiesDialogData({
-                            sessionId: activeSessionId,
-                            fullPath: getEntryFullPath(entry),
-                            name: entry.name,
-                            is_dir: entry.is_dir,
-                          });
-                        }
-                      }}
-                    >
-                      <MdInfo className="text-[0.875rem] text-muted-foreground mr-2" />
-                      {t("fileExplorer.cmProperties")}
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              );
-            })}
+            {files.map((entry) => (
+              <FileListItem
+                key={entry.name}
+                entry={entry}
+                isSelected={selectedFile === entry.name}
+                activeSessionId={activeSessionId}
+                onSelect={(entry) => setSelectedFile(entry.name)}
+                onItemClick={handleItemClick}
+                onOpenDefault={handleOpenDefault}
+                onRefresh={() => loadDirectory(currentPath)}
+                onUpload={handleUpload}
+                onDownload={handleDownload}
+                onRename={(entry) => {
+                  if (activeSessionId)
+                    setRenameDialogData({
+                      sessionId: activeSessionId,
+                      oldPath: getEntryFullPath(entry),
+                      name: entry.name,
+                      currentDirPath: currentPath,
+                    });
+                }}
+                onMove={(entry) => {
+                  if (activeSessionId)
+                    setMoveDialogData({
+                      sessionId: activeSessionId,
+                      oldPath: getEntryFullPath(entry),
+                      name: entry.name,
+                    });
+                }}
+                onDelete={handleDelete}
+                onCopyPath={handleCopyPath}
+                onSendToTerminal={handleSendToTerminal}
+                onProperties={(entry) => {
+                  if (activeSessionId) {
+                    setPropertiesDialogData({
+                      sessionId: activeSessionId,
+                      fullPath: getEntryFullPath(entry),
+                      name: entry.name,
+                      is_dir: entry.is_dir,
+                    });
+                  }
+                }}
+              />
+            ))}
           </ul>
         )}
       </div>
@@ -792,6 +508,14 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         <RenameDialog
           data={renameDialogData}
           onClose={() => setRenameDialogData(null)}
+          onSuccess={() => loadDirectory(currentPath)}
+        />
+      )}
+
+      {deleteDialogData && (
+        <DeleteDialog
+          data={deleteDialogData}
+          onClose={() => setDeleteDialogData(null)}
           onSuccess={() => loadDirectory(currentPath)}
         />
       )}

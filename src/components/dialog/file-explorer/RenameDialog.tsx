@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdRefresh } from "react-icons/md";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +54,7 @@ export default function RenameDialog({ data, onClose, onSuccess }: RenameDialogP
       onSuccess();
       onClose();
     } catch (e) {
-      alert(String(e));
+      toast.error(String(e));
     } finally {
       setIsSubmitting(false);
     }
