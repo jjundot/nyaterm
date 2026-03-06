@@ -170,7 +170,10 @@
     "symlinkTarget": "Symlink Target",
     "copyDirPath": "Copy Directory Path",
     "sendDirPathToTerminal": "Send Directory Path to Terminal",
-    "properties": "Properties"
+    "properties": "Properties",
+    "syncTerminalPath": "Sync from Terminal",
+    "autoSyncTerminalPath": "Auto Sync from Terminal",
+    "syncFailed": "Failed to sync terminal path"
   },
   "quickCommands": {
     "label": "Label",

@@ -3,19 +3,41 @@
 //! Spawns the user's shell (PowerShell on Windows, $SHELL elsewhere) and bridges I/O to Tauri.
 
 use crate::error::AppResult;
-use crate::session::{SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType};
+use crate::session::{
+    SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
+};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
+/// Extracts the path from an OSC 7 sequence (same logic as ssh.rs).
+fn parse_osc7(text: &str) -> Option<String> {
+    let start = text.find("\x1b]7;")?;
+    let rest = &text[start + 4..];
+    let end = rest.find('\x07').or_else(|| rest.find("\x1b\\"))?;
+    let payload = &rest[..end];
+    let after_scheme = payload.strip_prefix("file://")?;
+    let path = if after_scheme.starts_with('/') {
+        after_scheme.to_string()
+    } else {
+        let slash = after_scheme.find('/')?;
+        after_scheme[slash..].to_string()
+    };
+    if path.is_empty() {
+        None
+    } else {
+        Some(path)
+    }
+}
+
 struct OutputBuffer {
     attached: bool,
     buffer: Vec<String>,
 }
 
-fn get_default_shell(app: Option<&AppHandle>) -> CommandBuilder {
+fn get_default_shell(app: Option<&AppHandle>) -> (CommandBuilder, String) {
     let mut shell_cmd = String::new();
 
     if let Some(app) = app {
@@ -41,15 +63,18 @@ fn get_default_shell(app: Option<&AppHandle>) -> CommandBuilder {
     let parts: Vec<&str> = shell_cmd.split_whitespace().collect();
     if parts.is_empty() {
         #[cfg(target_os = "windows")]
-        return CommandBuilder::new("powershell.exe");
+        return (
+            CommandBuilder::new("powershell.exe"),
+            "powershell.exe".to_string(),
+        );
         #[cfg(not(target_os = "windows"))]
-        return CommandBuilder::new("/bin/bash");
+        return (CommandBuilder::new("/bin/bash"), "bash".to_string());
     } else {
         let mut builder = CommandBuilder::new(parts[0]);
         if parts.len() > 1 {
             builder.args(&parts[1..]);
         }
-        builder
+        (builder, parts[0].to_string())
     }
 }
 
@@ -69,11 +94,13 @@ pub async fn create_local_session(
         connected: true,
     };
 
+    let cwd: SharedCwd = Arc::new(tokio::sync::Mutex::new(None));
     let session_handle = SessionHandle {
         info: session_info,
         cmd_tx,
         ssh_config: None,
         ssh_handle: None,
+        cwd: cwd.clone(),
     };
     manager.add_session(session_handle).await;
 
@@ -82,7 +109,7 @@ pub async fn create_local_session(
     let rt_handle = tokio::runtime::Handle::current();
 
     std::thread::spawn(move || {
-        pty_session_thread(app, sid, mgr, cmd_rx, rt_handle);
+        pty_session_thread(app, sid, mgr, cmd_rx, rt_handle, cwd);
     });
 
     Ok(session_id)
@@ -94,6 +121,7 @@ fn pty_session_thread(
     manager: Arc<SessionManager>,
     mut cmd_rx: mpsc::UnboundedReceiver<SessionCommand>,
     rt_handle: tokio::runtime::Handle,
+    cwd: SharedCwd,
 ) {
     let pty_system = native_pty_system();
     let pair = match pty_system.openpty(PtySize {
@@ -113,7 +141,7 @@ fn pty_session_thread(
         }
     };
 
-    let cmd = get_default_shell(Some(&app));
+    let (cmd, shell_exe) = get_default_shell(Some(&app));
     let mut _child = match pair.slave.spawn_command(cmd) {
         Ok(c) => c,
         Err(e) => {
@@ -134,6 +162,23 @@ fn pty_session_thread(
             return;
         }
     };
+
+    // Inject shell integration scripts for OSC 7.
+    // Each script ends with a unique OSC marker; the reader thread discards all
+    // output until this marker is seen, so the injection is invisible to the user.
+    let shell_exe = shell_exe.to_lowercase();
+    let inject_sh = "if [ -z \"$DFLY_INJ\" ]; then export DFLY_INJ=1; __dfc() { printf \"\\033]7;file://%s%s\\007\" \"$HOSTNAME\" \"$PWD\"; }; [ -n \"$BASH_VERSION\" ] && PROMPT_COMMAND=\"__dfc; $PROMPT_COMMAND\"; [ -n \"$ZSH_VERSION\" ] && precmd_functions+=(__dfc); fi; printf '\\033]7777;DflyReady\\007'\n";
+    let inject_fish = "if not set -q DFLY_INJ; set -gx DFLY_INJ 1; function __dfc_hook --on-event fish_prompt; printf \"\\033]7;file://%s%s\\007\" (hostname) $PWD; end; end; printf '\\033]7777;DflyReady\\007'\n";
+    let inject_pwsh = "if (-not $env:DFLY_INJ) { $env:DFLY_INJ='1'; function prompt { $p = (pwd).ProviderPath; $h = [System.Net.Dns]::GetHostName(); Write-Host -NoNewline \"`e]7;file://$h$p`a\"; return \"PS $p> \" } }; Write-Host -NoNewline \"`e]7777;DflyReady`a\"\n";
+
+    if shell_exe.contains("powershell") || shell_exe.contains("pwsh") {
+        let _ = writer.write_all(inject_pwsh.as_bytes());
+    } else if shell_exe.contains("fish") {
+        let _ = writer.write_all(inject_fish.as_bytes());
+    } else if shell_exe.contains("bash") || shell_exe.contains("zsh") || shell_exe.contains("sh") {
+        let _ = writer.write_all(inject_sh.as_bytes());
+    }
+
     let mut reader = match pair.master.try_clone_reader() {
         Ok(r) => r,
         Err(e) => {
@@ -153,13 +198,47 @@ fn pty_session_thread(
     let output_event = format!("terminal-output-{}", session_id);
     let buf_reader = output_buf.clone();
 
+    const READY_MARKER: &str = "\x1b]7777;DflyReady\x07";
+
+    let cwd_event = format!("cwd-changed-{}", session_id);
+    let rt_for_reader = rt_handle.clone();
     std::thread::spawn(move || {
         let mut buf = [0u8; 4096];
+        let mut injecting = true;
+        let mut leftover = String::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
                     let text = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                    let text = if injecting {
+                        leftover.push_str(&text);
+                        if let Some(pos) = leftover.find(READY_MARKER) {
+                            injecting = false;
+                            let after = leftover[pos + READY_MARKER.len()..].to_string();
+                            leftover.clear();
+                            after
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        text
+                    };
+
+                    if text.is_empty() {
+                        continue;
+                    }
+
+                    if let Some(path) = parse_osc7(&text) {
+                        let p = path.clone();
+                        let cwd_ev = cwd_event.clone();
+                        let app_ref = app_read.clone();
+                        rt_for_reader.block_on(async {
+                            *cwd.lock().await = Some(p);
+                        });
+                        let _ = app_ref.emit(&cwd_ev, &path);
+                    }
                     let emit_now = {
                         let mut ob = buf_reader.lock().unwrap();
                         if ob.attached {

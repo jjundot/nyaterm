@@ -170,7 +170,10 @@
     "symlinkTarget": "符号链接目标",
     "copyDirPath": "复制目录路径",
     "sendDirPathToTerminal": "将目录路径发送到终端",
-    "properties": "属性"
+    "properties": "属性",
+    "syncTerminalPath": "同步终端路径",
+    "autoSyncTerminalPath": "自动同步终端路径",
+    "syncFailed": "同步终端路径失败"
   },
   "quickCommands": {
     "label": "标签",

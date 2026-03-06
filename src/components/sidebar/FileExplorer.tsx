@@ -18,6 +18,8 @@ import {
   MdNoteAdd,
   MdRefresh,
   MdSend,
+  MdSync,
+  MdSyncLock,
   MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
@@ -64,6 +66,7 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
   const [propertiesDialogData, setPropertiesDialogData] = useState<PropertiesDialogData | null>(
     null,
   );
+  const [autoSyncCwd, setAutoSyncCwd] = useState(false);
   const [, setAlwaysUploadFiles] = useState<Set<string>>(new Set());
 
   const sessionCacheRef = useRef<Map<string, { files: FileEntry[]; currentPath: string; homeDir: string }>>(new Map());
@@ -282,6 +285,31 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
     parts.pop();
     loadDirectory(parts.join("/") || "/");
   };
+
+  const handleSyncCwd = useCallback(async () => {
+    if (!activeSessionId) return;
+    try {
+      const cwd = await invoke<string>("get_terminal_cwd", { sessionId: activeSessionId });
+      if (cwd && cwd !== currentPath) {
+        loadDirectory(cwd);
+      }
+    } catch (e) {
+      toast.error(`${t("fileExplorer.syncFailed")}: ${e}`);
+    }
+  }, [activeSessionId, currentPath, loadDirectory, t]);
+
+  useEffect(() => {
+    if (!autoSyncCwd || !activeSessionId) return;
+    const unlisten = listen<string>(`cwd-changed-${activeSessionId}`, (event) => {
+      const newCwd = event.payload;
+      if (newCwd) {
+        loadDirectory(newCwd);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [autoSyncCwd, activeSessionId, loadDirectory]);
 
   const getEntryFullPath = (entry: FileEntry) => {
     return currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`;
@@ -608,48 +636,64 @@ export default function FileExplorer({ activeSessionId }: FileExplorerProps) {
         )}
       </ContextMenu>
 
-      {activeSessionId &&
-        !loading &&
-        !error &&
-        files.length > 0 &&
-        (() => {
-          const totalItems = files.length;
-          const hasFiles = files.some((f) => !f.is_dir);
-          const totalSize = files.filter((f) => !f.is_dir).reduce((sum, f) => sum + f.size, 0);
-
-          return (
-            <div
-              className="px-2 py-1.5 text-[0.6875rem] border-t flex items-center justify-between shrink-0"
-              style={{
-                color: "var(--df-text-dimmed)",
-                borderColor: "var(--df-border)",
-                backgroundColor: "var(--df-bg-panel)",
-              }}
+      {activeSessionId && (
+        <div
+          className="px-2 py-1.5 text-[0.6875rem] border-t flex items-center justify-between shrink-0"
+          style={{
+            color: "var(--df-text-dimmed)",
+            borderColor: "var(--df-border)",
+            backgroundColor: "var(--df-bg-panel)",
+          }}
+        >
+          <div className="flex gap-4">
+            {!loading && !error && files.length > 0 && (
+              <>
+                <span>{t("fileExplorer.totalItems", { count: files.length })}</span>
+                {files.some((f) => !f.is_dir) && (
+                  <span>{formatSize(files.filter((f) => !f.is_dir).reduce((sum, f) => sum + f.size, 0))}</span>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+              onClick={handleSyncCwd}
+              title={t("fileExplorer.syncTerminalPath")}
             >
-              <div className="flex gap-4">
-                <span>{t("fileExplorer.totalItems", { count: totalItems })}</span>
-                {hasFiles && <span>{formatSize(totalSize)}</span>}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  if (activeSessionId && currentPath) {
-                    invoke("write_to_session", {
-                      sessionId: activeSessionId,
-                      data: `${currentPath}`,
-                    });
-                    emit(`focus-terminal-${activeSessionId}`);
-                  }
-                }}
-                title={t("fileExplorer.sendToTerminal")}
-              >
-                <MdSend className="h-[0.875rem] w-[0.875rem]" />
-              </Button>
-            </div>
-          );
-        })()}
+              <MdSync className="h-[0.875rem] w-[0.875rem]" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-6 w-6 rounded-md ${autoSyncCwd ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setAutoSyncCwd((v) => !v)}
+              title={t("fileExplorer.autoSyncTerminalPath")}
+            >
+              <MdSyncLock className="h-[0.875rem] w-[0.875rem]" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (activeSessionId && currentPath) {
+                  invoke("write_to_session", {
+                    sessionId: activeSessionId,
+                    data: `${currentPath}`,
+                  });
+                  emit(`focus-terminal-${activeSessionId}`);
+                }
+              }}
+              title={t("fileExplorer.sendToTerminal")}
+            >
+              <MdSend className="h-[0.875rem] w-[0.875rem]" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {renameDialogData && (
         <RenameDialog

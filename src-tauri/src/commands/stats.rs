@@ -20,9 +20,9 @@ pub async fn get_remote_stats(
 
     let handle = {
         let sessions = state.sessions.lock().await;
-        let session = sessions
-            .get(&session_id)
-            .ok_or_else(|| AppError::SessionNotFound(format!("Session '{}' not found", session_id)))?;
+        let session = sessions.get(&session_id).ok_or_else(|| {
+            AppError::SessionNotFound(format!("Session '{}' not found", session_id))
+        })?;
 
         session
             .ssh_handle
@@ -70,6 +70,32 @@ pub async fn get_remote_stats(
         mem_used_mb: parts[1].parse::<u64>().unwrap_or(0),
         mem_total_mb: parts[2].parse::<u64>().unwrap_or(0),
     })
+}
+
+#[tauri::command]
+pub async fn get_terminal_cwd(
+    state: tauri::State<'_, Arc<SessionManager>>,
+    session_id: String,
+) -> AppResult<String> {
+    let cwd_arc = {
+        let sessions = state.sessions.lock().await;
+        let session = sessions.get(&session_id).ok_or_else(|| {
+            AppError::SessionNotFound(format!("Session '{}' not found", session_id))
+        })?;
+        session.cwd.clone()
+    };
+
+    let cached = cwd_arc.lock().await;
+    if let Some(cwd) = cached.as_ref() {
+        return Ok(cwd.clone());
+    }
+
+    // Since we now use shell integration (OSC 7) inject scripts, this should only happen
+    // in the first fraction of a second before the shell prompt is rendered, or if the
+    // user's shell is extremely unconventional.
+    Err(AppError::Config(
+        "Working directory not yet available. Please execute a command or press Enter in the terminal to trigger sync.".to_string(),
+    ))
 }
 
 #[tauri::command]

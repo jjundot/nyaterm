@@ -12,6 +12,8 @@ use std::sync::{Arc, OnceLock};
 use tauri::Emitter;
 use tokio::sync::{mpsc, Mutex};
 
+pub type SharedCwd = Arc<Mutex<Option<String>>>;
+
 /// Distinguishes SSH vs local PTY sessions for UI and routing.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SessionType {
@@ -49,6 +51,8 @@ pub struct SessionHandle {
     pub ssh_config: Option<Arc<dyn Any + Send + Sync>>,
     /// SSH-specific: authenticated `client::Handle` for channel multiplexing (SFTP, exec).
     pub ssh_handle: Option<Arc<dyn Any + Send + Sync>>,
+    /// Current working directory updated via OSC 7 (shell integration)
+    pub cwd: SharedCwd,
 }
 
 /// Central registry of sessions, history, and fuzzy search store.
