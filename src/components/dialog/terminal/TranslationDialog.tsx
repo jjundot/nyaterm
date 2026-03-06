@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdContentCopy, MdCheck } from "react-icons/md";
 import { useApp } from "@/context/AppContext";
-import type { TranslateResult } from "@/types";
+import type { TranslateResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

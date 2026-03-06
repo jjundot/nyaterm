@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { NumberInput } from "@/components/ui/number-input";
 import { Textarea } from "@/components/ui/textarea";
 import { openSettings } from "@/lib/windowManager";
-import type { Group, SavedConnection, SshKey } from "../types";
+import type { Group, SavedConnection, SshKey } from "@/lib/types";
 
 export default function NewSessionPage() {
   const { t } = useTranslation();
@@ -62,8 +62,8 @@ export default function NewSessionPage() {
   }, []);
 
   useEffect(() => {
-    invoke<Group[]>("get_groups").then(setGroups).catch(() => {});
-    invoke<SshKey[]>("get_ssh_keys").then(setSshKeys).catch(() => {});
+    invoke<Group[]>("get_groups").then(setGroups).catch(() => { });
+    invoke<SshKey[]>("get_ssh_keys").then(setSshKeys).catch(() => { });
 
     if (editId) {
       invoke<SavedConnection[]>("get_saved_connections").then((conns) => {
@@ -81,7 +81,7 @@ export default function NewSessionPage() {
           setKeyId(found.key_id || "");
           setIconKey(found.icon || "");
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [editId]);
 

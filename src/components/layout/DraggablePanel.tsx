@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { MdDragIndicator } from "react-icons/md";
-import type { PanelId } from "../../types";
+import type { PanelId } from "@/lib/types";
 
 type DropPosition = "before" | "after";
 

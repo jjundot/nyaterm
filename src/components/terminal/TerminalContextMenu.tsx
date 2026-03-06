@@ -15,7 +15,7 @@ import {
   MdTravelExplore,
 } from "react-icons/md";
 import { useApp } from "@/context/AppContext";
-import type { SearchEngine } from "@/types";
+import type { SearchEngine } from "@/lib/types";
 import { SEARCH_ICONS, type QuickIconDef } from "../icons";
 import TranslationDialog from "../dialog/terminal/TranslationDialog";
 import {
@@ -150,116 +150,116 @@ export default function TerminalContextMenu({
 
   return (
     <>
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div className="h-full w-full" onContextMenu={handleContextMenu}>
-          {children}
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="min-w-[200px]">
-        {ctxSelection.hasSelection ? (
-          <>
-            <ContextMenuItem onClick={() => doCopy(ctxSelection.text)}>
-              <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.copy")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onFind(ctxSelection.text)}>
-              <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.find")}
-            </ContextMenuItem>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>
-                <MdTravelExplore className="text-[0.875rem] text-muted-foreground mr-2" />
-                {t("terminalCtx.searchOnline")}
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent>
-                {appSettings?.search?.custom_engines?.map((engine) => {
-                  let IconComponent = null;
-                  let color = undefined;
-                  if (engine.icon && SEARCH_ICONS[engine.icon]) {
-                    const iconDef = SEARCH_ICONS[engine.icon] as QuickIconDef;
-                    IconComponent = iconDef.icon;
-                    color = iconDef.color;
-                  }
-
-                  return (
-                    <ContextMenuItem
-                      key={engine.name}
-                      onClick={() => doSearchOnline(ctxSelection.text, engine)}
-                    >
-                      {IconComponent && (
-                        <IconComponent className="text-[0.875rem] mr-2" style={{ color }} />
-                      )}
-                      {engine.name}
-                    </ContextMenuItem>
-                  );
-                })}
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            {translationProviders.length > 0 && (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="h-full w-full" onContextMenu={handleContextMenu}>
+            {children}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="min-w-[200px]">
+          {ctxSelection.hasSelection ? (
+            <>
+              <ContextMenuItem onClick={() => doCopy(ctxSelection.text)}>
+                <MdContentCopy className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.copy")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onFind(ctxSelection.text)}>
+                <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.find")}
+              </ContextMenuItem>
               <ContextMenuSub>
                 <ContextMenuSubTrigger>
-                  <MdTranslate className="text-[0.875rem] text-muted-foreground mr-2" />
-                  {t("terminalCtx.translate")}
+                  <MdTravelExplore className="text-[0.875rem] text-muted-foreground mr-2" />
+                  {t("terminalCtx.searchOnline")}
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent>
-                  {translationProviders.map((p) => (
-                    <ContextMenuItem
-                      key={p.id}
-                      onClick={() =>
-                        setTranslateState({ open: true, text: ctxSelection.text, provider: p.id })
-                      }
-                    >
-                      {t(`translation.${p.id}`)}
-                    </ContextMenuItem>
-                  ))}
+                  {appSettings?.search?.custom_engines?.map((engine) => {
+                    let IconComponent = null;
+                    let color = undefined;
+                    if (engine.icon && SEARCH_ICONS[engine.icon]) {
+                      const iconDef = SEARCH_ICONS[engine.icon] as QuickIconDef;
+                      IconComponent = iconDef.icon;
+                      color = iconDef.color;
+                    }
+
+                    return (
+                      <ContextMenuItem
+                        key={engine.name}
+                        onClick={() => doSearchOnline(ctxSelection.text, engine)}
+                      >
+                        {IconComponent && (
+                          <IconComponent className="text-[0.875rem] mr-2" style={{ color }} />
+                        )}
+                        {engine.name}
+                      </ContextMenuItem>
+                    );
+                  })}
                 </ContextMenuSubContent>
               </ContextMenuSub>
-            )}
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={doPaste}>
-              <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.paste")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={doPasteSelected}>
-              <MdContentPasteGo className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.pasteSelectedText")}
-            </ContextMenuItem>
-          </>
-        ) : (
-          <>
-            <ContextMenuItem onClick={doPaste}>
-              <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.paste")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => onFind()}>
-              <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
-              {t("terminalCtx.find")}
-            </ContextMenuItem>
-          </>
-        )}
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={doClearScreen}>
-          <MdClearAll className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("terminalCtx.clearScreen")}
-        </ContextMenuItem>
-        <ContextMenuItem onClick={doClearAll}>
-          <MdDeleteSweep className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("terminalCtx.clearAll")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem onClick={doSelectAll}>
-          <MdSelectAll className="text-[0.875rem] text-muted-foreground mr-2" />
-          {t("terminalCtx.selectAll")}
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-    <TranslationDialog
-      open={translateState.open}
-      onClose={() => setTranslateState({ open: false, text: "", provider: "" })}
-      text={translateState.text}
-      provider={translateState.provider}
-    />
+              {translationProviders.length > 0 && (
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                    <MdTranslate className="text-[0.875rem] text-muted-foreground mr-2" />
+                    {t("terminalCtx.translate")}
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    {translationProviders.map((p) => (
+                      <ContextMenuItem
+                        key={p.id}
+                        onClick={() =>
+                          setTranslateState({ open: true, text: ctxSelection.text, provider: p.id })
+                        }
+                      >
+                        {t(`translation.${p.id}`)}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+              )}
+              <ContextMenuSeparator />
+              <ContextMenuItem onClick={doPaste}>
+                <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.paste")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={doPasteSelected}>
+                <MdContentPasteGo className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.pasteSelectedText")}
+              </ContextMenuItem>
+            </>
+          ) : (
+            <>
+              <ContextMenuItem onClick={doPaste}>
+                <MdContentPaste className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.paste")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => onFind()}>
+                <MdSearch className="text-[0.875rem] text-muted-foreground mr-2" />
+                {t("terminalCtx.find")}
+              </ContextMenuItem>
+            </>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={doClearScreen}>
+            <MdClearAll className="text-[0.875rem] text-muted-foreground mr-2" />
+            {t("terminalCtx.clearScreen")}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={doClearAll}>
+            <MdDeleteSweep className="text-[0.875rem] text-muted-foreground mr-2" />
+            {t("terminalCtx.clearAll")}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onClick={doSelectAll}>
+            <MdSelectAll className="text-[0.875rem] text-muted-foreground mr-2" />
+            {t("terminalCtx.selectAll")}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      <TranslationDialog
+        open={translateState.open}
+        onClose={() => setTranslateState({ open: false, text: "", provider: "" })}
+        text={translateState.text}
+        provider={translateState.provider}
+      />
     </>
   );
 }

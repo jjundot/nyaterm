@@ -4,7 +4,7 @@ import i18n from "../i18n";
 import { AppContext } from "./AppContext";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
-import type { AppSettings, Group, SavedConnection, UiConfig } from "../types";
+import type { AppSettings, Group, SavedConnection, UiConfig } from "@/lib/types";
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
@@ -116,7 +116,7 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
             invoke("save_app_settings", { settings: next }).catch((e) =>
               logger.error("Failed to save app settings", e),
             );
-            emit("settings-changed", next).catch(() => {});
+            emit("settings-changed", next).catch(() => { });
           }, 500);
         }
         return next;
@@ -135,8 +135,8 @@ export function ChildAppProvider({ children }: { children: ReactNode }) {
     [updateAppSettings],
   );
 
-  const noop = useCallback(() => {}, []);
-  const noopAsync = useCallback(async () => {}, []);
+  const noop = useCallback(() => { }, []);
+  const noopAsync = useCallback(async () => { }, []);
 
   return (
     <AppContext.Provider

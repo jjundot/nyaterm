@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp } from "@/context/AppContext";
-import { themeList } from "@/themes";
+import { themeList } from "@/lib/themes";
 import { SettingNumberInput, SettingRow, SettingSelect, SettingSwitch } from "./SettingFormItems";
 
 export function AppearanceTab() {

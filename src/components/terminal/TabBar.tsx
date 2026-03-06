@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { MdAdd, MdClose, MdDns, MdTerminal } from "react-icons/md";
 import { CONNECTION_ICONS } from "../icons";
 import { useApp } from "../../context/AppContext";
-import type { Tab } from "../../types";
+import type { Tab } from "@/lib/types";
 
 interface TabBarProps {
   tabs: Tab[];
@@ -22,7 +22,7 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose, onAddTab }: TabBar
   const handleClose = (e: React.MouseEvent, tab: Tab) => {
     e.stopPropagation();
     if (!tab.connecting) {
-      invoke("close_session", { sessionId: tab.sessionId }).catch(() => {});
+      invoke("close_session", { sessionId: tab.sessionId }).catch(() => { });
     }
     onTabClose(tab.id);
   };
@@ -63,9 +63,8 @@ function TabBar({ tabs, activeTabId, onTabChange, onTabClose, onAddTab }: TabBar
       {tabs.map((tab) => (
         <div
           key={tab.id}
-          className={`group flex items-center px-4 gap-2 border-r text-xs font-medium cursor-pointer transition-colors ${
-            activeTabId === tab.id ? "active-tab" : ""
-          } ${activeTabId !== tab.id ? "df-hover" : ""}`}
+          className={`group flex items-center px-4 gap-2 border-r text-xs font-medium cursor-pointer transition-colors ${activeTabId === tab.id ? "active-tab" : ""
+            } ${activeTabId !== tab.id ? "df-hover" : ""}`}
           style={{
             borderColor: "var(--df-border)",
             color: activeTabId === tab.id ? "var(--df-text)" : "var(--df-text-muted)",
