@@ -102,10 +102,12 @@ export function SettingSelect({
 
 export function SettingSwitch({
   checked,
+  disabled,
   onChange,
 }: {
   checked: boolean;
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
-  return <Switch checked={checked} onCheckedChange={onChange} />;
+  return <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} />;
 }

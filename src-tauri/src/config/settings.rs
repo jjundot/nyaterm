@@ -215,12 +215,41 @@ impl Default for SecuritySettings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KeywordHighlightRule {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    #[serde(default = "default_highlight_color_dark")]
+    pub color_dark: String,
+    #[serde(default = "default_highlight_color_light")]
+    pub color_light: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_highlight_color_dark() -> String {
+    "#79c0ff".to_string()
+}
+fn default_highlight_color_light() -> String {
+    "#0969da".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSettings {
     #[serde(default = "default_scrollback")]
     pub scrollback_lines: u32,
     #[serde(default = "default_keep_alive")]
     pub keep_alive_interval: u32,
+    #[serde(default = "default_false")]
+    pub hardware_acceleration: bool,
+    #[serde(default = "default_true")]
+    pub keyword_highlights_enabled: bool,
+    #[serde(default)]
+    pub keyword_highlights: Vec<KeywordHighlightRule>,
 }
 
 fn default_scrollback() -> u32 {
@@ -235,6 +264,9 @@ impl Default for TerminalSettings {
         Self {
             scrollback_lines: default_scrollback(),
             keep_alive_interval: default_keep_alive(),
+            hardware_acceleration: false,
+            keyword_highlights_enabled: true,
+            keyword_highlights: Vec::new(),
         }
     }
 }

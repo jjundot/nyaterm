@@ -109,6 +109,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     scrollback_lines: 10000,
     keep_alive_interval: 60,
     hardware_acceleration: false,
+    keyword_highlights_enabled: true,
+    keyword_highlights: [],
   },
   interaction: {
     copy_on_select: false,

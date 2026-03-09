@@ -42,7 +42,13 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     idle_lock_minutes: 0,
     host_key_policy: "prompt",
   },
-  terminal: { scrollback_lines: 10000, keep_alive_interval: 60, hardware_acceleration: false },
+  terminal: {
+    scrollback_lines: 10000,
+    keep_alive_interval: 60,
+    hardware_acceleration: false,
+    keyword_highlights_enabled: true,
+    keyword_highlights: [],
+  },
   interaction: {
     copy_on_select: false,
     right_click_paste: false,

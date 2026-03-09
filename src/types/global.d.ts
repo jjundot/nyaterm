@@ -211,10 +211,24 @@ export interface SecuritySettings {
   host_key_policy: string;
 }
 
+export interface KeywordHighlightRule {
+  id: string;
+  name: string;
+  /** Regex patterns (one per entry, compiled with gi flags). */
+  patterns: string[];
+  /** Color used when the terminal background is dark. */
+  color_dark: string;
+  /** Color used when the terminal background is light. */
+  color_light: string;
+  enabled: boolean;
+}
+
 export interface TerminalSettings {
   scrollback_lines: number;
   keep_alive_interval: number;
   hardware_acceleration: boolean;
+  keyword_highlights_enabled: boolean;
+  keyword_highlights: KeywordHighlightRule[];
 }
 
 export interface InteractionSettings {

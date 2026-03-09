@@ -9,7 +9,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
+import { hexLuminance } from "@/lib/keywordHighlightPresets";
 import { useCommandHistory } from "@/hooks/useCommandHistory";
+import { useKeywordHighlighter } from "@/hooks/useKeywordHighlighter";
 import { useShellIntegration } from "@/hooks/useShellIntegration";
 import { useTerminalSearch } from "@/hooks/useTerminalSearch";
 import { useTerminalSettings } from "@/hooks/useTerminalSettings";
@@ -54,9 +56,6 @@ export default function XTerminal({ sessionId, active }: XTerminalProps) {
     handleSearchPrev,
     handleCloseSearch,
   } = useTerminalSearch(terminalRef);
-
-  // Appearance, theme, and interaction settings sync
-  useTerminalSettings(terminalRef, fitAddonRef, theme, appSettings);
 
   // Shell integration state & reading commands
   const { shellIntegrationRef, readCommandFromBuffer, readBetweenMarkerAndCursor } =
@@ -351,6 +350,17 @@ export default function XTerminal({ sessionId, active }: XTerminalProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Appearance, theme, and interaction settings sync.
+  // Declared AFTER the terminal creation effect so effects from these hooks
+  // run after terminalRef.current is already set on initial mount.
+  useTerminalSettings(terminalRef, fitAddonRef, theme, appSettings);
+
+  // Keyword highlight rules sync (same ordering requirement as above).
+  // isDark is derived from the theme background so built-in rule colors
+  // switch automatically when the user changes themes.
+  const isDark = hexLuminance(theme.colors.bg) < 0.5;
+  useKeywordHighlighter(terminalRef, appSettings, sessionId, isDark);
 
   // Re-fit and focus when tab becomes active
   useEffect(() => {
