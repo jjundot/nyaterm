@@ -287,7 +287,7 @@ pub struct InteractionSettings {
 }
 
 fn default_word_separators() -> String {
-    " ()[]{}\"'".to_string()
+    " ()[]{}\"':=,;|&<>".to_string()
 }
 fn default_encoding() -> String {
     "UTF-8".to_string()
