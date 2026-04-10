@@ -1,4 +1,4 @@
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use serde::Deserialize;
 
 use super::TranslateResult;

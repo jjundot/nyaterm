@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::Rng;
 
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 
 use super::TranslateResult;
 

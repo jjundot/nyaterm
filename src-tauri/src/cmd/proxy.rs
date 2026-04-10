@@ -1,5 +1,5 @@
 use crate::config::{self, ProxyConfig};
-use crate::core::error::AppResult;
+use crate::error::AppResult;
 use crate::utils::crypto;
 
 #[tauri::command]

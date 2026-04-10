@@ -1,8 +1,8 @@
 //! SSH tunnel manager for local, remote, and dynamic (SOCKS5) port forwarding.
 
-use crate::config::{self, TunnelConfig};
-use crate::core::error::{AppError, AppResult};
 use super::{create_ssh_handle, SshHandler};
+use crate::config::{self, TunnelConfig};
+use crate::error::{AppError, AppResult};
 use russh::client;
 use std::collections::HashMap;
 use std::sync::Arc;

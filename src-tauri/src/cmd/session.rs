@@ -1,5 +1,5 @@
 use crate::config;
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use crate::core::ssh::{self, PendingAuthManager};
 use crate::core::{self, RecordingManager, SessionCommand, SessionInfo, SessionManager};
 use crate::utils::fuzzy::{fuzzy_search_items, FuzzyResult};
@@ -189,4 +189,3 @@ pub async fn cancel_otp_request(
     state.respond(&request_id, None).await;
     Ok(())
 }
-

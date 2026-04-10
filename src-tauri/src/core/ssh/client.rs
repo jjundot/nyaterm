@@ -1,4 +1,4 @@
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use russh::client;
 use russh::keys::PublicKeyBase64;
 use serde::Deserialize;

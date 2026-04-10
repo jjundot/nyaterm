@@ -1,4 +1,4 @@
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 

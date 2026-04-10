@@ -1,5 +1,5 @@
 use crate::config;
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use crate::core::ssh::TunnelManager;
 use std::sync::Arc;
 use tauri::Manager;
@@ -53,9 +53,10 @@ pub async fn open_tunnel(
     tunnel_id: String,
 ) -> AppResult<()> {
     let tunnels = config::load_tunnels(&app)?;
-    let tunnel = tunnels.iter().find(|t| t.id == tunnel_id).ok_or_else(|| {
-        AppError::Config(format!("Tunnel '{}' not found", tunnel_id))
-    })?;
+    let tunnel = tunnels
+        .iter()
+        .find(|t| t.id == tunnel_id)
+        .ok_or_else(|| AppError::Config(format!("Tunnel '{}' not found", tunnel_id)))?;
     tunnel_mgr.open(tunnel, &app).await
 }
 

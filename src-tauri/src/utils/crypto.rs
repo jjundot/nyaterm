@@ -11,7 +11,7 @@
 //! Copying `master.key` to another machine/user account alone is not sufficient to decrypt
 //! credentials — the wrapping key is derived from the local user's home directory path.
 
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use aes_gcm::aead::{Aead, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use base64::engine::general_purpose::STANDARD as B64;

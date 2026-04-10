@@ -3,9 +3,9 @@
 //! Reuses the existing SSH connection via channel multiplexing instead of
 //! creating a new TCP connection for each operation.
 
-use crate::core::error::{AppError, AppResult};
-use crate::core::SessionManager;
 use super::SshHandler;
+use crate::error::{AppError, AppResult};
+use crate::core::SessionManager;
 use russh::client;
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::{FileType, OpenFlags};

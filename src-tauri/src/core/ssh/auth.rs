@@ -1,5 +1,5 @@
 use super::client::{SshAuth, SshConfig, SshHandler};
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use russh::client::{self, KeyboardInteractiveAuthResponse};
 use russh::MethodKind;
 use serde::Serialize;

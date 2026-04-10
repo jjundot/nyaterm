@@ -1,4 +1,4 @@
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};

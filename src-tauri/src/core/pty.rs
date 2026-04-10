@@ -6,7 +6,7 @@ use super::recording::RecordingManager;
 use super::session::{
     SessionCommand, SessionHandle, SessionInfo, SessionManager, SessionType, SharedCwd,
 };
-use crate::core::error::AppResult;
+use crate::error::AppResult;
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::{Read, Write};

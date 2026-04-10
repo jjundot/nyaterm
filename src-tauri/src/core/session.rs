@@ -2,8 +2,9 @@
 //!
 //! Tracks SSH/local sessions, routes commands, and persists history for fuzzy search.
 
-use crate::core::error::{AppError, AppResult};
-use crate::utils::fuzzy::{CommandHistoryStore, FuzzyResult};
+use crate::error::{AppError, AppResult};
+use super::history::CommandHistoryStore;
+use crate::utils::fuzzy::FuzzyResult;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::HashMap;

@@ -1,4 +1,4 @@
-use crate::core::error::AppResult;
+use crate::error::AppResult;
 use crate::core::ssh::sftp;
 use crate::core::SessionManager;
 use std::sync::Arc;

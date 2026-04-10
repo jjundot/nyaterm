@@ -1,5 +1,5 @@
 use super::client::{SshHandle, SshHandler};
-use crate::core::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult};
 use crate::core::ssh::osc::{self, OscStripper, ShellKind};
 use crate::core::{RecordingManager, SessionCommand, SessionManager, SharedCwd};
 use russh::{client, ChannelMsg};
