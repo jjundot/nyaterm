@@ -15,6 +15,8 @@ import {
 import PanelHeader from "@/components/layout/PanelHeader";
 import { useApp } from "@/context/AppContext";
 import { type TransferItem, useTransfer } from "../../context/TransferContext";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 interface FileTransferProps {
   activeSessionId: string | null;
@@ -228,16 +230,23 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
       </div>
 
       {displayPath && (
-        <div
-          className="shrink-0 border-t px-2 py-1.5 font-mono text-[0.75rem] leading-tight"
-          style={{
-            borderColor: "var(--df-border)",
-            color: "var(--df-text-dimmed)",
-          }}
-          title={displayPath}
-        >
-          <div className="truncate">{displayPath}</div>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="shrink-0 border-t px-2 py-1.5 font-mono text-[0.75rem] leading-tight"
+              style={{
+                borderColor: "var(--df-border)",
+                color: "var(--df-text-dimmed)",
+              }}
+              onClick={() => openPath(displayPath)}
+            >
+              <div className="truncate">{displayPath}</div>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {t("fileTransfer.downloadPath")}
+          </TooltipContent>
+        </Tooltip>
       )}
     </aside>
   );

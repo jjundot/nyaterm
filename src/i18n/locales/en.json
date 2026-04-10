@@ -166,8 +166,8 @@
     "targetPortRemote": "Local Service Port",
     "targetPortRemoteHint": "The port used by the local service on your current device.",
     "tunnelPreview": "Forwarding Preview",
-    "tunnelPreviewLocal": "{{bindHost}}:{{listenPort}} â†?{{targetHost}}:{{targetPort}}",
-    "tunnelPreviewRemote": "remote ({{bindHost}}):{{listenPort}} â†?{{targetHost}}:{{targetPort}}",
+    "tunnelPreviewLocal": "{{bindHost}}:{{listenPort}} ï¿½?{{targetHost}}:{{targetPort}}",
+    "tunnelPreviewRemote": "remote ({{bindHost}}):{{listenPort}} ï¿½?{{targetHost}}:{{targetPort}}",
     "tunnelPreviewDynamic": "SOCKS5 on {{bindHost}}:{{listenPort}}",
     "bindAddress": "Bind Scope",
     "bindAddressHint": "Choose whether the listening port is reachable only on this device or from other hosts too.",
@@ -427,8 +427,8 @@
     "folderNamePlaceholder": "New folder...",
     "connectionName": "Connection Name",
     "sortDefault": "Custom Order",
-    "sortNameAsc": "Name A â†?Z",
-    "sortNameDesc": "Name Z â†?A"
+    "sortNameAsc": "Name A ï¿½?Z",
+    "sortNameDesc": "Name Z ï¿½?A"
   },
   "app": {
     "noActiveSessions": "No active sessions",
@@ -449,7 +449,10 @@
     "clearAll": "Clear all",
     "transferring": "Transferring",
     "completed": "Completed",
-    "error": "Error"
+    "error": "Error",
+    "savePath": "Save to: {{path}}",
+    "openDownloadPath": "Open Download Path",
+    "downloadPath": "Download Path"
   },
   "settings": {
     "title": "Settings",
@@ -710,4 +713,3 @@
     "cancelled": "2FA authentication cancelled"
   }
 }
-
