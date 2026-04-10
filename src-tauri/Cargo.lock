@@ -1346,6 +1346,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "dirs",
+ "dragonfly-otp",
  "encoding_rs",
  "font-kit",
  "hex",
@@ -1378,6 +1379,10 @@ dependencies = [
  "uuid",
  "zip",
 ]
+
+[[package]]
+name = "dragonfly-otp"
+version = "0.1.0"
 
 [[package]]
 name = "dtoa"
