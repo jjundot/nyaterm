@@ -11,7 +11,7 @@ mod session;
 pub mod ssh;
 pub mod stats;
 pub mod translate;
-pub(crate) mod watcher;
+pub mod watcher;
 
 pub use pty::create_local_session;
 pub use recording::RecordingManager;
