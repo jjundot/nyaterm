@@ -169,7 +169,10 @@ pub async fn close_session(
 ) -> AppResult<()> {
     let session_id_clone = session_id.clone();
 
-    let res = state.send_command(&session_id, SessionCommand::Close).await;
+    let res = match state.send_command(&session_id, SessionCommand::Close).await {
+        Err(AppError::SessionNotFound(_)) => Ok(()),
+        other => other,
+    };
 
     // Concurrently tidy up any downloaded/watcher temporary files stored in the OS temp directory
     tauri::async_runtime::spawn(async move {
