@@ -5,6 +5,11 @@
     "issues": "Issues",
     "website": "Website"
   },
+  "activeSessions": {
+    "disconnect": "Disconnect Session",
+    "noMatches": "No sessions matched your search",
+    "searchPlaceholder": "Search by name, type, or session ID..."
+  },
   "activityBar": {
     "leftBottom": "Left Bottom",
     "leftTop": "Left Top",
@@ -144,6 +149,8 @@
     "copyDirPath": "Copy Directory Path",
     "cwdTrackingUnavailable": "Terminal path sync unavailable for this session",
     "delete": "Delete",
+    "deleteFailedCount": "Failed to delete {{count}} items",
+    "deleteFailedItem": "Failed to delete one item",
     "downloadSelected": "Download Selected",
     "editPath": "Click to edit path",
     "emptyDirectory": "Empty directory",
@@ -158,6 +165,7 @@
     "group": "Group",
     "loading": "Loading...",
     "location": "Location",
+    "moreItems": "{{count}} more item(s)",
     "moveTo": "Move '{{name}}' to (full path):",
     "mtime": "Modified Time",
     "newFile": "New File",
@@ -185,6 +193,7 @@
     "size": "Size",
     "special": "Special",
     "sureDelete": "Are you sure you want to delete '{{name}}'?",
+    "sureDeleteMultiple": "Are you sure you want to delete {{count}} selected items?",
     "symlinkName": "Symlink Name",
     "symlinkTarget": "Symlink Target",
     "syncFailed": "Failed to sync terminal path",
@@ -453,6 +462,7 @@
     "nic": "NIC",
     "os": "OS",
     "receive": "Receive",
+    "refresh": "Refresh",
     "send": "Send",
     "system": "System",
     "systemLoad": "System Load",
