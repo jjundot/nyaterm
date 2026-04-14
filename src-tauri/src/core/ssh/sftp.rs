@@ -7,10 +7,13 @@ use super::SshConnectionHandles;
 use crate::core::SessionManager;
 use crate::error::{AppError, AppResult};
 use russh_sftp::client::SftpSession;
-use russh_sftp::protocol::{FileType, OpenFlags};
+use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::Emitter;
+
+const SFTP_FILE_TYPE_MASK: u32 = 0o170000;
+const POSIX_MODE_MASK: u32 = 0o7777;
 
 /// Event payload emitted to the frontend to track file transfer lifecycle.
 #[derive(Debug, Clone, Serialize)]
@@ -129,6 +132,24 @@ fn permissions_to_string(mode: u32, type_char: char) -> String {
     s
 }
 
+fn type_char_from_mode(mode: u32) -> char {
+    match mode & SFTP_FILE_TYPE_MASK {
+        0o040000 => 'd',
+        0o120000 => 'l',
+        _ => '-',
+    }
+}
+
+fn describe_permissions(mode: Option<u32>) -> String {
+    match mode {
+        Some(mode) => format!(
+            "{mode:#06o} ({})",
+            permissions_to_string(mode, type_char_from_mode(mode))
+        ),
+        None => "none".to_string(),
+    }
+}
+
 /// Resolves `$HOME` on the remote host via SFTP `canonicalize(".")`.
 pub async fn get_home_dir(manager: Arc<SessionManager>, session_id: &str) -> AppResult<String> {
     let sftp = open_sftp(&manager, session_id).await?;
@@ -188,6 +209,16 @@ pub async fn list_remote_dir(
         });
     }
 
+    tracing::debug!(
+        target: "user_action",
+        action = "list",
+        entity = "remote_directory",
+        session_id = %session_id,
+        remote_path = path,
+        item_count = entries.len(),
+        "User listed remote directory"
+    );
+
     Ok(entries)
 }
 
@@ -213,6 +244,16 @@ pub async fn delete_remote_file(
     }
 
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "delete",
+        entity = "remote_entry",
+        session_id = %session_id,
+        remote_path = path,
+        "User deleted remote entry"
+    );
+
     Ok(())
 }
 
@@ -271,6 +312,17 @@ pub async fn rename_remote_file(
     let sftp = open_sftp(&manager, session_id).await?;
     sftp.rename(old_path, new_path).await?;
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "update",
+        entity = "remote_entry",
+        session_id = %session_id,
+        old_path = old_path,
+        new_path = new_path,
+        "User renamed or moved remote entry"
+    );
+
     Ok(())
 }
 
@@ -893,14 +945,21 @@ pub async fn create_remote_file(
     let sftp = open_sftp(&manager, session_id).await?;
     let file = sftp.create(path).await?;
     drop(file);
-    if let Some(m) = mode {
-        let mode_u32 = u32::from_str_radix(&m, 8)
-            .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", m)))?;
-        let mut attrs = sftp.metadata(path).await?;
-        attrs.permissions = Some(mode_u32);
-        sftp.set_metadata(path, attrs).await?;
+    if let Some(ref m) = mode {
+        apply_remote_mode_after_create(&sftp, path, m, "file").await?;
     }
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "create",
+        entity = "remote_file",
+        session_id = %session_id,
+        remote_path = path,
+        requested_mode = ?mode,
+        "User created remote file"
+    );
+
     Ok(())
 }
 
@@ -912,14 +971,21 @@ pub async fn create_remote_dir(
 ) -> AppResult<()> {
     let sftp = open_sftp(&manager, session_id).await?;
     sftp.create_dir(path).await?;
-    if let Some(m) = mode {
-        let mode_u32 = u32::from_str_radix(&m, 8)
-            .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", m)))?;
-        let mut attrs = sftp.metadata(path).await?;
-        attrs.permissions = Some(mode_u32);
-        sftp.set_metadata(path, attrs).await?;
+    if let Some(ref m) = mode {
+        apply_remote_mode_after_create(&sftp, path, m, "directory").await?;
     }
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "create",
+        entity = "remote_directory",
+        session_id = %session_id,
+        remote_path = path,
+        requested_mode = ?mode,
+        "User created remote directory"
+    );
+
     Ok(())
 }
 
@@ -932,6 +998,17 @@ pub async fn create_remote_symlink(
     let sftp = open_sftp(&manager, session_id).await?;
     sftp.symlink(link_path, target_path).await?;
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "create",
+        entity = "remote_symlink",
+        session_id = %session_id,
+        remote_path = link_path,
+        target_path = target_path,
+        "User created remote symlink"
+    );
+
     Ok(())
 }
 
@@ -941,17 +1018,89 @@ pub async fn chmod_remote_file(
     path: &str,
     mode: &str,
 ) -> AppResult<()> {
-    let mode_u32 = u32::from_str_radix(mode, 8)
-        .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", mode)))?;
+    let mode_u32 = parse_octal_mode(mode)?;
 
     let sftp = open_sftp(&manager, session_id).await?;
 
-    let mut attrs = sftp.metadata(path).await?;
-    attrs.permissions = Some(mode_u32);
-    sftp.set_metadata(path, attrs).await?;
+    apply_remote_mode(&sftp, path, mode_u32).await?;
 
     let _ = sftp.close().await;
+
+    tracing::debug!(
+        target: "user_action",
+        action = "update",
+        entity = "remote_permissions",
+        session_id = %session_id,
+        remote_path = path,
+        requested_mode = mode,
+        "User changed remote permissions"
+    );
+
     Ok(())
+}
+
+fn parse_octal_mode(mode: &str) -> AppResult<u32> {
+    u32::from_str_radix(mode, 8)
+        .map_err(|_| AppError::Channel(format!("Invalid octal mode: {}", mode)))
+}
+
+async fn apply_remote_mode(sftp: &SftpSession, path: &str, requested_mode: u32) -> AppResult<()> {
+    let original_attrs = sftp.metadata(path).await?;
+    let original_permissions = original_attrs.permissions;
+    let requested_permissions = requested_mode & POSIX_MODE_MASK;
+
+    let mut attrs = FileAttributes::empty();
+    attrs.permissions = Some(requested_permissions);
+    sftp.set_metadata(path, attrs).await.map_err(|error| {
+        tracing::warn!(
+            remote_path = path,
+            original_permissions = %describe_permissions(original_permissions),
+            requested_permissions = format!("{requested_permissions:#06o}"),
+            error = %error,
+            "Failed to update remote permissions with a permissions-only SETSTAT payload"
+        );
+        AppError::from(error)
+    })?;
+
+    let actual_permissions = sftp.metadata(path).await.ok().and_then(|attrs| attrs.permissions);
+    tracing::debug!(
+        target: "user_action",
+        action = "chmod",
+        remote_path = path,
+        original_permissions = %describe_permissions(original_permissions),
+        requested_permissions = format!("{requested_permissions:#06o}"),
+        actual_permissions = %describe_permissions(actual_permissions),
+        "Applied remote permissions"
+    );
+
+    Ok(())
+}
+
+async fn apply_remote_mode_after_create(
+    sftp: &SftpSession,
+    path: &str,
+    mode: &str,
+    item_kind: &str,
+) -> AppResult<()> {
+    let requested_mode = parse_octal_mode(mode)?;
+
+    match apply_remote_mode(sftp, path, requested_mode).await {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            if sftp.metadata(path).await.is_ok() {
+                tracing::warn!(
+                    remote_path = path,
+                    requested_mode = mode,
+                    item_kind = %item_kind,
+                    error = %error,
+                    "Remote item created, but failed to apply requested permissions"
+                );
+                Ok(())
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 /// Recursively downloads a remote directory to a local path, preserving structure.
@@ -1079,6 +1228,16 @@ pub async fn get_file_properties(
     };
     let permissions = permissions_to_string(perms, type_char);
     let name = path.split('/').last().unwrap_or(path).to_string();
+
+    tracing::debug!(
+        target: "user_action",
+        action = "read",
+        entity = "remote_properties",
+        session_id = %session_id,
+        remote_path = path,
+        permissions = %describe_permissions(attrs.permissions),
+        "User read remote entry properties"
+    );
 
     Ok(FileProperties {
         name,
