@@ -852,5 +852,22 @@
     "title": "Translation",
     "translatedText": "Translated Text",
     "youdao": "Youdao Translate"
+  },
+  "updater": {
+    "checking": "Checking for updates...",
+    "currentVersion": "Current Version",
+    "downloading": "Downloading update...",
+    "hasNewVersion": "New",
+    "installing": "Installing...",
+    "newVersion": "New Version",
+    "newVersionAvailable": "New Version Available",
+    "noUpdate": "You're on the latest version.",
+    "readyToRestart": "Update installed. Restart to complete.",
+    "releaseDate": "Release Date",
+    "releaseNotes": "Release Notes",
+    "restartNow": "Restart Now",
+    "retry": "Retry",
+    "updateFailed": "Update failed",
+    "updateNow": "Update Now"
   }
 }
