@@ -4,7 +4,14 @@ import { downloadDir, join, tempDir } from "@tauri-apps/api/path";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 
-import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdArrowUpward,
@@ -146,6 +153,7 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
   const filesRef = useRef<FileEntry[]>([]);
   const currentPathRef = useRef("");
   const homeDirRef = useRef("");
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
 
   const sessionCacheRef = useRef<
@@ -346,6 +354,7 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
 
   const handleSelect = useCallback(
     (entry: FileEntry, event: React.MouseEvent) => {
+      listContainerRef.current?.focus();
       setSelectedFiles((prev) => {
         const isContextMenuEvent = event.button === 2 || event.type === "contextmenu";
         if (isContextMenuEvent) {
@@ -443,6 +452,35 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
     if (selectedFiles.size === 0) return;
     const selected = files.filter((f) => selectedFiles.has(f.name));
     openDeleteDialog(selected);
+  };
+
+  const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key !== "Delete" ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      selectedFiles.size === 0 ||
+      deleteDialogData
+    ) {
+      return;
+    }
+
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      (target.isContentEditable ||
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    handleDeleteSelected();
   };
 
   const handleGoUp = () => {
@@ -850,7 +888,17 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
 
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex-1 overflow-y-auto p-2 text-sm terminal-scroll">
+          <div
+            ref={listContainerRef}
+            className="flex-1 overflow-y-auto p-2 text-sm terminal-scroll outline-none"
+            tabIndex={canBrowseFiles ? 0 : -1}
+            onMouseDown={() => {
+              if (canBrowseFiles) {
+                listContainerRef.current?.focus();
+              }
+            }}
+            onKeyDown={handleListKeyDown}
+          >
             {!activeSessionId ? (
               <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
                 <MdFolderOff className="text-xl block mx-auto mb-2" />
