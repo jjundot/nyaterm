@@ -6,6 +6,8 @@ pub struct InteractionSettings {
     pub copy_on_select: bool,
     #[serde(default = "default_true")]
     pub right_click_paste: bool,
+    #[serde(default = "default_true")]
+    pub command_suggestions_enabled: bool,
     #[serde(default = "default_word_separators")]
     pub word_separators: String,
     #[serde(default = "default_encoding")]
@@ -28,6 +30,7 @@ impl Default for InteractionSettings {
         Self {
             copy_on_select: false,
             right_click_paste: false,
+            command_suggestions_enabled: true,
             word_separators: default_word_separators(),
             default_encoding: default_encoding(),
         }

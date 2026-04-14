@@ -8,6 +8,22 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  collectSessionPanes,
+  createSessionPane,
+  createWorkspaceTab,
+  ensureActivePane,
+  getFirstSessionPane,
+  getNextPersistOrder,
+  insertTabAfter,
+  moveTab,
+  removeSessionPane,
+  restoreTabFromPersistence,
+  serializeTabsForPersistence,
+  splitSessionPane,
+  updateSessionPane,
+  updateSplitRatio as updateWorkspaceSplitRatio,
+} from "@/lib/workspaceTabs";
 import type {
   AppSettings,
   Group,
@@ -18,22 +34,6 @@ import type {
   Tab,
   UiConfig,
 } from "@/types/global";
-import {
-  collectSessionPanes,
-  createSessionPane,
-  createWorkspaceTab,
-  ensureActivePane,
-  getNextPersistOrder,
-  insertTabAfter,
-  removeSessionPane,
-  restoreTabFromPersistence,
-  serializeTabsForPersistence,
-  splitSessionPane,
-  updateSplitRatio as updateWorkspaceSplitRatio,
-  updateSessionPane,
-  moveTab,
-  getFirstSessionPane,
-} from "@/lib/workspaceTabs";
 import { invoke } from "../lib/invoke";
 import { logger } from "../lib/logger";
 import { DEFAULT_TERMINAL_FONT_SIZE } from "../lib/terminalFontSize";
@@ -187,6 +187,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   interaction: {
     copy_on_select: false,
     right_click_paste: false,
+    command_suggestions_enabled: true,
     word_separators: " ()[]{}\"':=,;|&<>",
     default_encoding: "UTF-8",
   },
@@ -428,15 +429,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [commitTabs, setActiveTabId],
   );
 
-  const updateTabSession = useCallback((tabId: string, sessionId: string) => {
-    const tab = tabsRef.current.find((item) => item.id === tabId);
-    if (!tab) return;
-    const paneId = tab.activePaneId;
-    const nextTabs = tabsRef.current.map((item) =>
-      item.id === tabId ? { ...item, root: updateSessionPane(item.root, paneId, { sessionId, connecting: false }) } : item,
-    );
-    void commitTabs(nextTabs);
-  }, [commitTabs]);
+  const updateTabSession = useCallback(
+    (tabId: string, sessionId: string) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+      const paneId = tab.activePaneId;
+      const nextTabs = tabsRef.current.map((item) =>
+        item.id === tabId
+          ? {
+              ...item,
+              root: updateSessionPane(item.root, paneId, { sessionId, connecting: false }),
+            }
+          : item,
+      );
+      void commitTabs(nextTabs);
+    },
+    [commitTabs],
+  );
 
   const updatePaneSession = useCallback(
     (tabId: string, paneId: string, sessionId: string) => {
@@ -527,7 +536,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const nextActivePaneId =
         tab.activePaneId === paneId
-          ? getFirstSessionPane(nextRoot)?.id ?? tab.activePaneId
+          ? (getFirstSessionPane(nextRoot)?.id ?? tab.activePaneId)
           : tab.activePaneId;
 
       const nextTabs = currentTabs.map((item) =>
@@ -550,7 +559,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updates: Partial<Pick<Tab, "customName" | "tabColor">>,
       options?: { immediatePersist?: boolean },
     ) => {
-      const nextTabs = tabsRef.current.map((tab) => (tab.id === tabId ? { ...tab, ...updates } : tab));
+      const nextTabs = tabsRef.current.map((tab) =>
+        tab.id === tabId ? { ...tab, ...updates } : tab,
+      );
       await commitTabs(nextTabs, { immediatePersist: options?.immediatePersist });
     },
     [commitTabs],
@@ -571,10 +582,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let nextActiveTabId =
         options?.nextActiveTabId !== undefined ? options.nextActiveTabId : currentActiveTabId;
 
-      if (
-        nextActiveTabId &&
-        !nextTabs.some((tab) => tab.id === nextActiveTabId)
-      ) {
+      if (nextActiveTabId && !nextTabs.some((tab) => tab.id === nextActiveTabId)) {
         nextActiveTabId = null;
       }
 

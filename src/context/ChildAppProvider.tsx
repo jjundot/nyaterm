@@ -62,6 +62,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   interaction: {
     copy_on_select: false,
     right_click_paste: false,
+    command_suggestions_enabled: true,
     word_separators: " ()[]{}\"':=,;|&<>",
     default_encoding: "UTF-8",
   },

@@ -82,6 +82,23 @@ export function InteractionTab() {
           />
         </SettingRow>
 
+        <SettingRow
+          label={t("settings.commandSuggestions")}
+          desc={t("settings.commandSuggestionsDesc")}
+        >
+          <SettingSwitch
+            checked={appSettings.interaction.command_suggestions_enabled}
+            onChange={(v) =>
+              updateAppSettings({
+                interaction: {
+                  ...appSettings.interaction,
+                  command_suggestions_enabled: v,
+                },
+              })
+            }
+          />
+        </SettingRow>
+
         <SettingInput
           label={t("settings.wordSeparators")}
           desc={t("settings.wordSeparatorsDesc")}

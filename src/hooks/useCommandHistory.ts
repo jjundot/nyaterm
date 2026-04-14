@@ -1,8 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Terminal } from "@xterm/xterm";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ShellIntegrationState } from "@/hooks/useShellIntegration";
 import type { FuzzyResult } from "@/types/global";
+
+interface XTermCoreWithRenderDimensions {
+  _core?: {
+    _renderService?: {
+      dimensions?: {
+        css: {
+          cell: {
+            height: number;
+            width: number;
+          };
+        };
+      };
+    };
+  };
+}
 
 export function useCommandHistory(
   sessionId: string,
@@ -10,6 +25,7 @@ export function useCommandHistory(
   currentLineRef: React.RefObject<string>,
   shellIntegrationRef: React.RefObject<ShellIntegrationState>,
   readBufferCommand: () => string,
+  enabled: boolean,
 ) {
   const [suggestions, setSuggestions] = useState<FuzzyResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -20,14 +36,19 @@ export function useCommandHistory(
   const selectedIndexRef = useRef(-1);
   const showSuggestionsRef = useRef(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enabledRef = useRef(enabled);
 
-  const getCursorViewportPosition = (): { top: number; left: number } => {
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
+  const getCursorViewportPosition = useCallback((): { top: number; left: number } => {
     try {
       const terminal = terminalRef.current;
       if (!terminal) return { top: 0, left: 0 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const core = (terminal as any)._core;
-      const dims = core._renderService.dimensions;
+      const core = (terminal as Terminal & XTermCoreWithRenderDimensions)._core;
+      const dims = core?._renderService?.dimensions;
+      if (!dims) return { top: 0, left: 0 };
       const cellHeight: number = dims.css.cell.height;
       const cellWidth: number = dims.css.cell.width;
 
@@ -46,9 +67,13 @@ export function useCommandHistory(
     } catch {
       return { top: 0, left: 0 };
     }
-  };
+  }, [terminalRef]);
 
   const dismissSuggestions = useCallback(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
     if (
       !showSuggestionsRef.current &&
       suggestionsRef.current.length === 0 &&
@@ -64,8 +89,27 @@ export function useCommandHistory(
     setShowSuggestions(false);
   }, []);
 
+  useEffect(() => {
+    if (!enabled) {
+      dismissSuggestions();
+    }
+  }, [enabled, dismissSuggestions]);
+
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, []);
+
   const triggerSearch = useCallback(() => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+    if (!enabledRef.current) {
+      dismissSuggestions();
+      return;
+    }
 
     if (currentLineRef.current.length === 0) {
       dismissSuggestions();
@@ -73,6 +117,11 @@ export function useCommandHistory(
     }
 
     searchTimerRef.current = setTimeout(async () => {
+      if (!enabledRef.current) {
+        dismissSuggestions();
+        return;
+      }
+
       const pattern = readBufferCommand();
       if (!pattern.trim()) {
         dismissSuggestions();
@@ -91,6 +140,11 @@ export function useCommandHistory(
           .sort((a, b) => b.score - a.score)
           .slice(0, 12);
 
+        if (!enabledRef.current) {
+          dismissSuggestions();
+          return;
+        }
+
         suggestionsRef.current = merged;
         selectedIndexRef.current = -1;
         showSuggestionsRef.current = merged.length > 0;
@@ -105,7 +159,7 @@ export function useCommandHistory(
         // Ignore errors
       }
     }, 80);
-  }, [readBufferCommand, dismissSuggestions, currentLineRef]);
+  }, [readBufferCommand, dismissSuggestions, currentLineRef, getCursorViewportPosition]);
 
   const handleSelectSuggestion = useCallback(
     (command: string) => {

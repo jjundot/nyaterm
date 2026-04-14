@@ -55,6 +55,7 @@ export default function XTerminal({
   const showLineNumbers = appSettings.terminal.show_line_numbers;
   const showTimestamps = appSettings.terminal.show_timestamps;
   const showGutter = showLineNumbers || showTimestamps;
+  const commandSuggestionsEnabled = appSettings.interaction.command_suggestions_enabled;
 
   const currentLineRef = useRef("");
   const appSettingsRef = useRef(appSettings);
@@ -132,6 +133,7 @@ export default function XTerminal({
     currentLineRef,
     shellIntegrationRef,
     readCommandFromBuffer,
+    commandSuggestionsEnabled,
   );
 
   // Create and setup terminal
@@ -901,7 +903,7 @@ export default function XTerminal({
 
         <CommandSuggestions
           suggestions={suggestions}
-          visible={showSuggestions}
+          visible={commandSuggestionsEnabled && showSuggestions}
           selectedIndex={selectedIndex}
           cursorPosition={cursorPosition}
           onSelect={handleSelectSuggestion}

@@ -462,6 +462,7 @@ export interface TunnelConfig {
 export interface InteractionSettings {
   copy_on_select: boolean;
   right_click_paste: boolean;
+  command_suggestions_enabled: boolean;
   word_separators: string;
   default_encoding: string;
 }
