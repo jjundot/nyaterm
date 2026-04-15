@@ -18,23 +18,23 @@ Dragonfly is a desktop client for SSH-centric operations and mixed terminal work
 
 ### Terminal experience
 
-- Search bar, command history, fuzzy suggestions, and context actions
+- Search bar, command history, fuzzy suggestions, online search, translation, and context actions
 - Optional line numbers and timestamps gutter for dense terminal output
 - Optional action links for IPv4 addresses, `host:port`, and archive filenames
 - Optional keyword highlighting with built-in presets and custom rules
-- Session recording, configurable scrollback, and SSH keep-alive
-- Remote resource monitor for active SSH sessions
+- Large-output protection under load, configurable scrollback, and SSH keep-alive
+- Session recording and remote resource monitor for active SSH sessions
 
 ### Remote operations
 
-- Built-in SFTP file explorer with upload, download, rename, move, delete, and properties
-- Transfer queue with retry, resume, timestamp preservation, and configurable concurrency
+- Built-in SFTP file explorer with upload, download, rename, move, delete, symlink, and properties
+- Transfer queue with pause, resume, cancel, retry, timestamp preservation, duplicate handling, and configurable concurrency
 - Open remote files in a local editor and upload changes back through the watcher flow
-- Quick Commands with categories, colors, icons, and variable prompts
+- Quick Commands with categories, colors, icons, execution modes, pinning, and variable prompts
 
 ### Security and networking
 
-- Password auth, private keys, host-key verification, and local credential encryption
+- Password auth, private keys, host-key verification, and local encrypted credential storage
 - OTP management with TOTP/HOTP, QR import, and SSH auto-fill support
 - Screen lock, master password support, and known-hosts management
 - Proxy configs, SSH jump hosts, and local / remote / dynamic tunnels
@@ -56,6 +56,8 @@ The detailed user docs live in `docs-site/`.
 - Quick start: [docs-site/docs/getting-started/quick-start.md](docs-site/docs/getting-started/quick-start.md)
 - Guides: [docs-site/docs/guide/](docs-site/docs/guide)
 - Development docs: [docs-site/docs/development/](docs-site/docs/development)
+
+The docs site ships with Simplified Chinese by default and English under `/en/`.
 
 ## Screenshot placeholders
 
