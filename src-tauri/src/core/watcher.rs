@@ -112,7 +112,9 @@ pub async fn start_file_watch(
                                     domain: "watcher.sync".to_string(),
                                     event: "watch.emit_failed".to_string(),
                                     message: "Failed to emit file-modified event".to_string(),
-                                    ids: Some(serde_json::json!({ "session_id": session_id_clone.clone() })),
+                                    ids: Some(
+                                        serde_json::json!({ "session_id": session_id_clone.clone() }),
+                                    ),
                                     data: Some(serde_json::json!({
                                         "local_path": local_path_clone.clone(),
                                         "remote_path": remote_path_clone.clone(),

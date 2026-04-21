@@ -61,7 +61,10 @@ fn build_ids(connection_id: Option<&str>, request_id: Option<&str>) -> Option<Va
         );
     }
     if let Some(request_id) = request_id {
-        ids.insert("request_id".to_string(), Value::String(request_id.to_string()));
+        ids.insert(
+            "request_id".to_string(),
+            Value::String(request_id.to_string()),
+        );
     }
     if ids.is_empty() {
         None
@@ -671,7 +674,7 @@ async fn try_keyboard_interactive_after_partial(
                     mode,
                     otp_info,
                 )
-                    .await
+                .await
             } else {
                 log_structured(
                     StructuredLogLevel::Warn,

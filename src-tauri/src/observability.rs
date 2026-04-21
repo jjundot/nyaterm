@@ -94,8 +94,8 @@ pub fn init_tracing(log_dir: PathBuf, settings: &DiagnosticsSettings) {
         .build(&log_dir)
         .expect("failed to initialize rolling file appender");
 
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter(settings.level)));
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(default_filter(settings.level)));
 
     let local_time = subscriber_fmt::time::OffsetTime::local_rfc_3339().unwrap_or_else(|_| {
         subscriber_fmt::time::OffsetTime::new(
@@ -221,7 +221,10 @@ pub fn log_rate_limited(log: StructuredLog) {
     }
 
     if let Some(suppressed_count) = summary_count {
-        let mut data = log.data.clone().unwrap_or_else(|| Value::Object(Map::new()));
+        let mut data = log
+            .data
+            .clone()
+            .unwrap_or_else(|| Value::Object(Map::new()));
         if let Value::Object(ref mut map) = data {
             map.insert(
                 "suppressed_count".to_string(),
@@ -256,7 +259,10 @@ pub fn export_diagnostics(
     output_path: &str,
 ) -> AppResult<()> {
     let settings = config::load_app_settings(app).unwrap_or_default();
-    let log_dir = app.path().app_log_dir().map_err(|e| AppError::Config(e.to_string()))?;
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| AppError::Config(e.to_string()))?;
     let log_files = collect_log_files(
         &log_dir,
         normalize_retention_days(settings.diagnostics.retention_days),
@@ -377,10 +383,8 @@ impl tracing::field::Visit for JsonFieldVisitor {
         field: &tracing::field::Field,
         value: &(dyn std::error::Error + 'static),
     ) {
-        self.fields.insert(
-            field.name().to_string(),
-            Value::String(value.to_string()),
-        );
+        self.fields
+            .insert(field.name().to_string(), Value::String(value.to_string()));
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
@@ -405,7 +409,8 @@ fn build_log_entry_json(
     timestamp: String,
 ) -> Value {
     let domain = take_string_field(&mut fields, "domain").unwrap_or_else(|| target.to_string());
-    let event = take_string_field(&mut fields, "event").unwrap_or_else(|| "unclassified".to_string());
+    let event =
+        take_string_field(&mut fields, "event").unwrap_or_else(|| "unclassified".to_string());
     let message = take_string_field(&mut fields, "message").unwrap_or_else(|| target.to_string());
     let client_timestamp = take_string_field(&mut fields, "client_timestamp");
 
@@ -480,7 +485,9 @@ fn build_runtime_snapshot(
 ) -> Value {
     let sessions = tauri::async_runtime::block_on(session_manager.list_sessions());
     let tunnel_count = tauri::async_runtime::block_on(tunnel_manager.active_count());
-    let saved_tunnels = config::load_tunnels(app).map(|items| items.len()).unwrap_or(0);
+    let saved_tunnels = config::load_tunnels(app)
+        .map(|items| items.len())
+        .unwrap_or(0);
     let session_summary = summarize_sessions(&sessions);
 
     json!({
@@ -542,7 +549,10 @@ fn increment_counter(map: &mut Map<String, Value>, key: &str) {
         .and_then(Value::as_u64)
         .unwrap_or(0)
         .saturating_add(1);
-    map.insert(key.to_string(), Value::Number(serde_json::Number::from(next)));
+    map.insert(
+        key.to_string(),
+        Value::Number(serde_json::Number::from(next)),
+    );
 }
 
 fn collect_log_files(log_dir: &Path, retention_days: u32) -> AppResult<Vec<PathBuf>> {
@@ -588,7 +598,9 @@ fn cleanup_old_logs(log_dir: &Path, retention_days: u32) -> AppResult<()> {
 
 fn threshold_system_time(retention_days: u32) -> SystemTime {
     SystemTime::now()
-        .checked_sub(Duration::from_secs(u64::from(retention_days) * 24 * 60 * 60))
+        .checked_sub(Duration::from_secs(
+            u64::from(retention_days) * 24 * 60 * 60,
+        ))
         .unwrap_or(SystemTime::UNIX_EPOCH)
 }
 
@@ -790,8 +802,7 @@ fn normalize_retention_days(retention_days: u32) -> u32 {
 }
 
 fn format_timestamp() -> String {
-    let now = time::OffsetDateTime::now_local()
-        .unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+    let now = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
     now.format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| now.unix_timestamp().to_string())
 }
@@ -821,8 +832,14 @@ mod tests {
     fn build_log_entry_merges_reserved_and_extra_fields() {
         let mut fields = Map::new();
         fields.insert("domain".to_string(), Value::String("ui.error".to_string()));
-        fields.insert("event".to_string(), Value::String("dialog.open_failed".to_string()));
-        fields.insert("message".to_string(), Value::String("Open failed".to_string()));
+        fields.insert(
+            "event".to_string(),
+            Value::String("dialog.open_failed".to_string()),
+        );
+        fields.insert(
+            "message".to_string(),
+            Value::String("Open failed".to_string()),
+        );
         fields.insert(
             "ids".to_string(),
             Value::String("{\"session_id\":\"abc\"}".to_string()),
