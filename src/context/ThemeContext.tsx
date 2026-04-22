@@ -111,20 +111,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [appSettings.appearance, updateAppSettings],
   );
 
+  const contextValue = useMemo(
+    () => ({
+      theme: current,
+      themeName,
+      setTheme,
+      terminalTheme: resolvedTerminalTheme,
+      terminalThemeName,
+      setTerminalTheme,
+      themeNames: themeList,
+    }),
+    [
+      current,
+      themeName,
+      setTheme,
+      resolvedTerminalTheme,
+      terminalThemeName,
+      setTerminalTheme,
+    ],
+  );
+
   return (
-    <ThemeContext.Provider
-      value={{
-        theme: current,
-        themeName,
-        setTheme,
-        terminalTheme: resolvedTerminalTheme,
-        terminalThemeName,
-        setTerminalTheme,
-        themeNames: themeList,
-      }}
-    >
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>
   );
 }
 

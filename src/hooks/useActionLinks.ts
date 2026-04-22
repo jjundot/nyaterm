@@ -46,7 +46,7 @@ export interface UseActionLinksResult {
  */
 export function useActionLinks(
   terminalRef: React.RefObject<Terminal | null>,
-  appSettings: AppSettings,
+  terminalSettings: AppSettings["terminal"],
   sessionId: string,
   sendInputRef: React.RefObject<((data: string) => void) | null>,
   suspended = false,
@@ -58,9 +58,8 @@ export function useActionLinks(
   const closeMenu = useCallback(() => setMenuState(null), []);
   const closeTooltip = useCallback(() => setTooltipState(null), []);
 
-  const matcherSettings =
-    appSettings.terminal.action_links_matchers ?? DEFAULT_ACTION_LINK_MATCHERS;
-  const enabled = appSettings.terminal.action_links_enabled ?? false;
+  const matcherSettings = terminalSettings.action_links_matchers ?? DEFAULT_ACTION_LINK_MATCHERS;
+  const enabled = terminalSettings.action_links_enabled ?? false;
 
   const matchers = useMemo(() => {
     const list = [];

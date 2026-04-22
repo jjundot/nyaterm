@@ -133,11 +133,17 @@ interface AppContextType {
   settingsLoaded: boolean;
 }
 
+export type TerminalAppSettings = Pick<
+  AppSettings,
+  "appearance" | "interaction" | "terminal" | "translation" | "search"
+>;
+
 /**
  * App-wide state: tabs, settings (debounced save), saved connections (polled),
  * and dialog visibility. Updates via setState/useCallback; config persisted to backend.
  */
 export const AppContext = createContext<AppContextType | null>(null);
+const TerminalAppSettingsContext = createContext<TerminalAppSettings | null>(null);
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
   general: {
@@ -256,6 +262,105 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   },
 };
 
+function areSettingsValuesEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== typeof right) return false;
+  if (left === null || right === null) return left === right;
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    for (let index = 0; index < left.length; index += 1) {
+      if (!areSettingsValuesEqual(left[index], right[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  if (leftKeys.length !== rightKeys.length) return false;
+
+  for (const key of leftKeys) {
+    if (!(key in rightRecord)) return false;
+    if (!areSettingsValuesEqual(leftRecord[key], rightRecord[key])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function preserveAppSettingsReferences(prev: AppSettings, next: AppSettings): AppSettings {
+  const general = areSettingsValuesEqual(prev.general, next.general) ? prev.general : next.general;
+  const appearance = areSettingsValuesEqual(prev.appearance, next.appearance)
+    ? prev.appearance
+    : next.appearance;
+  const proxy = areSettingsValuesEqual(prev.proxy, next.proxy) ? prev.proxy : next.proxy;
+  const search = areSettingsValuesEqual(prev.search, next.search) ? prev.search : next.search;
+  const translation = areSettingsValuesEqual(prev.translation, next.translation)
+    ? prev.translation
+    : next.translation;
+  const security = areSettingsValuesEqual(prev.security, next.security)
+    ? prev.security
+    : next.security;
+  const terminal = areSettingsValuesEqual(prev.terminal, next.terminal)
+    ? prev.terminal
+    : next.terminal;
+  const interaction = areSettingsValuesEqual(prev.interaction, next.interaction)
+    ? prev.interaction
+    : next.interaction;
+  const transfer = areSettingsValuesEqual(prev.transfer, next.transfer)
+    ? prev.transfer
+    : next.transfer;
+  const diagnostics = areSettingsValuesEqual(prev.diagnostics, next.diagnostics)
+    ? prev.diagnostics
+    : next.diagnostics;
+  const cloudSync = areSettingsValuesEqual(prev.cloud_sync, next.cloud_sync)
+    ? prev.cloud_sync
+    : next.cloud_sync;
+  const ui = areSettingsValuesEqual(prev.ui, next.ui) ? prev.ui : next.ui;
+
+  if (
+    general === prev.general &&
+    appearance === prev.appearance &&
+    proxy === prev.proxy &&
+    search === prev.search &&
+    translation === prev.translation &&
+    security === prev.security &&
+    terminal === prev.terminal &&
+    interaction === prev.interaction &&
+    transfer === prev.transfer &&
+    diagnostics === prev.diagnostics &&
+    cloudSync === prev.cloud_sync &&
+    ui === prev.ui
+  ) {
+    return prev;
+  }
+
+  return {
+    ...next,
+    general,
+    appearance,
+    proxy,
+    search,
+    translation,
+    security,
+    terminal,
+    interaction,
+    transfer,
+    diagnostics,
+    cloud_sync: cloudSync,
+    ui,
+  };
+}
+
 /** Provides tabs, appSettings, savedConnections, and dialog state to the app. */
 export function AppProvider({ children }: { children: ReactNode }) {
   // Tabs State
@@ -350,9 +455,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearTimeout(appSettingsSaveTimerRef.current);
       appSettingsSaveTimerRef.current = null;
     }
-    appSettingsRef.current = next;
-    setLoggerLevel(next.diagnostics.level);
-    setAppSettings(next);
+    setAppSettings((current) => {
+      const normalized = preserveAppSettingsReferences(current, next);
+      appSettingsRef.current = normalized;
+      setLoggerLevel(normalized.diagnostics.level);
+      return normalized;
+    });
   }, []);
 
   // Convenience helper to update just the UI config portion
@@ -942,12 +1050,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
+  const terminalAppSettingsValue = useMemo(
+    () => ({
+      appearance: appSettings.appearance,
+      interaction: appSettings.interaction,
+      terminal: appSettings.terminal,
+      translation: appSettings.translation,
+      search: appSettings.search,
+    }),
+    [
+      appSettings.appearance,
+      appSettings.interaction,
+      appSettings.terminal,
+      appSettings.translation,
+      appSettings.search,
+    ],
+  );
+
+  return (
+    <AppContext.Provider value={contextValue}>
+      <TerminalAppSettingsContext.Provider value={terminalAppSettingsValue}>
+        {children}
+      </TerminalAppSettingsContext.Provider>
+    </AppContext.Provider>
+  );
 }
 
 /** Hook to access AppContext. Throws if used outside AppProvider. */
 export function useApp() {
   const context = useContext(AppContext);
   if (!context) throw new Error("useApp must be used within AppProvider");
+  return context;
+}
+
+export function useTerminalAppSettings(): TerminalAppSettings {
+  const context = useContext(TerminalAppSettingsContext);
+  if (!context) {
+    throw new Error("useTerminalAppSettings must be used within AppProvider");
+  }
   return context;
 }

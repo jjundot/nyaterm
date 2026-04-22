@@ -6,7 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ILinkHandler, Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useApp } from "@/context/AppContext";
+import { useTerminalAppSettings } from "@/context/AppContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useActionLinks } from "@/hooks/useActionLinks";
 import { useCommandHistory } from "@/hooks/useCommandHistory";
@@ -71,16 +71,17 @@ export default function XTerminal({
 
   const { terminalTheme } = useTheme();
   const { t } = useTranslation();
-  const { appSettings } = useApp();
-  const showLineNumbers = appSettings.terminal.show_line_numbers;
-  const showTimestamps = appSettings.terminal.show_timestamps;
+  const terminalAppSettings = useTerminalAppSettings();
+  const { appearance, interaction, terminal: terminalSettings } = terminalAppSettings;
+  const showLineNumbers = terminalSettings.show_line_numbers;
+  const showTimestamps = terminalSettings.show_timestamps;
   const showGutter = showLineNumbers || showTimestamps;
-  const commandSuggestionsEnabled = appSettings.interaction.command_suggestions_enabled;
-  const commandSuggestionMinChars = appSettings.interaction.command_suggestion_min_chars;
-  const commandSuggestionMaxChars = appSettings.interaction.command_suggestion_max_chars;
+  const commandSuggestionsEnabled = interaction.command_suggestions_enabled;
+  const commandSuggestionMinChars = interaction.command_suggestion_min_chars;
+  const commandSuggestionMaxChars = interaction.command_suggestion_max_chars;
 
   const inputStateRef = useRef(createTerminalInputState());
-  const appSettingsRef = useRef(appSettings);
+  const terminalAppSettingsRef = useRef(terminalAppSettings);
   const tRef = useRef(t);
   const doFindRef = useRef<(selection?: string) => void>(() => {});
   const sendInputRef = useRef<((data: string) => void) | null>(null);
@@ -119,8 +120,8 @@ export default function XTerminal({
   }, [visible]);
 
   useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
+    terminalAppSettingsRef.current = terminalAppSettings;
+  }, [terminalAppSettings]);
 
   useEffect(() => {
     tRef.current = t;
@@ -229,12 +230,12 @@ export default function XTerminal({
     let disposed = false;
 
     const terminal = new Terminal({
-      scrollback: appSettings.terminal.scrollback_lines,
-      cursorBlink: appSettings.appearance.cursor_blink,
-      cursorStyle: appSettings.appearance.cursor_style as "block" | "underline" | "bar",
-      fontSize: appSettings.appearance.font_size,
-      fontFamily: appSettings.appearance.font_family,
-      wordSeparator: appSettings.interaction.word_separators,
+      scrollback: terminalSettings.scrollback_lines,
+      cursorBlink: appearance.cursor_blink,
+      cursorStyle: appearance.cursor_style as "block" | "underline" | "bar",
+      fontSize: appearance.font_size,
+      fontFamily: appearance.font_family,
+      wordSeparator: interaction.word_separators,
       theme: { ...terminalTheme.colors.terminal },
       allowProposedApi: true,
     });
@@ -498,7 +499,7 @@ export default function XTerminal({
     });
 
     const writeParsedDisposable = terminal.onWriteParsed(() => {
-      const terminalSettings = appSettingsRef.current?.terminal;
+      const terminalSettings = terminalAppSettingsRef.current?.terminal;
       if (
         performanceModeRef.current !== "overloaded" &&
         (terminalSettings?.show_line_numbers || terminalSettings?.show_timestamps)
@@ -516,13 +517,13 @@ export default function XTerminal({
     const refreshGutter = () => {
       if (!isTerminalAlive()) return;
       if (performanceModeRef.current === "overloaded") return;
-      const terminalSettings = appSettingsRef.current?.terminal;
+      const terminalSettings = terminalAppSettingsRef.current?.terminal;
       if (!terminalSettings?.show_line_numbers && !terminalSettings?.show_timestamps) return;
       window.dispatchEvent(new CustomEvent("dragonfly:refresh-gutter", { detail: { sessionId } }));
     };
 
     const stampWrittenLines = (from: number, to: number, ts: number) => {
-      if (!appSettingsRef.current?.terminal?.show_timestamps) return;
+      if (!terminalAppSettingsRef.current?.terminal?.show_timestamps) return;
 
       const map = lineTimestampsRef.current;
       const start = Math.min(from, to);
@@ -877,7 +878,7 @@ export default function XTerminal({
       if (text) {
         lastSelection = text;
       }
-      if (appSettingsRef.current?.interaction?.copy_on_select) {
+      if (terminalAppSettingsRef.current?.interaction?.copy_on_select) {
         if (text) {
           navigator.clipboard.writeText(text).catch(() => {});
         }
@@ -963,14 +964,21 @@ export default function XTerminal({
   // Appearance, theme, and interaction settings sync.
   // Declared AFTER the terminal creation effect so effects from these hooks
   // run after terminalRef.current is already set on initial mount.
-  useTerminalSettings(terminalRef, fitAddonRef, terminalTheme, appSettings);
+  useTerminalSettings(
+    terminalRef,
+    fitAddonRef,
+    terminalTheme,
+    appearance,
+    terminalSettings,
+    interaction,
+  );
 
   // isDark is derived from the terminal theme background so built-in rule colors
   // switch automatically when the user changes themes.
   const isDark = hexLuminance(terminalTheme.colors.terminal.background) < 0.5;
   useKeywordHighlighter(
     terminalRef,
-    appSettings,
+    terminalSettings,
     sessionId,
     isDark,
     performanceMode === "overloaded",
@@ -978,7 +986,7 @@ export default function XTerminal({
 
   const { tooltipState, menuState, closeMenu } = useActionLinks(
     terminalRef,
-    appSettings,
+    terminalSettings,
     sessionId,
     sendInputRef,
     performanceMode === "overloaded",

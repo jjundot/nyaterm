@@ -2,14 +2,16 @@ import type { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
+import type { AppSettings } from "@/types/global";
 
 export function useTerminalSettings(
   terminalRef: React.RefObject<Terminal | null>,
   fitAddonRef: React.RefObject<FitAddon | null>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   terminalTheme: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  appSettings: any,
+  appearance: AppSettings["appearance"],
+  terminalSettings: AppSettings["terminal"],
+  interaction: AppSettings["interaction"],
 ) {
   const webglAddonRef = useRef<WebglAddon | null>(null);
 
@@ -17,7 +19,7 @@ export function useTerminalSettings(
   useEffect(() => {
     if (!terminalRef.current) return;
 
-    if (appSettings.terminal.hardware_acceleration) {
+    if (terminalSettings.hardware_acceleration) {
       if (!webglAddonRef.current) {
         try {
           const webgl = new WebglAddon();
@@ -44,7 +46,7 @@ export function useTerminalSettings(
         webglAddonRef.current = null;
       }
     };
-  }, [appSettings.terminal.hardware_acceleration, terminalRef]);
+  }, [terminalSettings.hardware_acceleration, terminalRef]);
   // React to terminal theme changes: update terminal colors dynamically
   useEffect(() => {
     if (terminalRef.current) {
@@ -56,7 +58,6 @@ export function useTerminalSettings(
   useEffect(() => {
     if (terminalRef.current) {
       const options = terminalRef.current.options;
-      const appearance = appSettings.appearance;
       options.fontFamily = appearance.font_family;
       options.fontSize = appearance.font_size;
       options.cursorBlink = appearance.cursor_blink;
@@ -67,19 +68,19 @@ export function useTerminalSettings(
         requestAnimationFrame(() => fitAddonRef.current?.fit());
       }
     }
-  }, [appSettings.appearance, terminalRef, fitAddonRef]);
+  }, [appearance, terminalRef, fitAddonRef]);
 
   // React to terminal core settings changes: scrollback
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.scrollback = appSettings.terminal.scrollback_lines;
+      terminalRef.current.options.scrollback = terminalSettings.scrollback_lines;
     }
-  }, [appSettings.terminal, terminalRef]);
+  }, [terminalSettings.scrollback_lines, terminalRef]);
 
   // React to interaction settings changes
   useEffect(() => {
     if (terminalRef.current) {
-      terminalRef.current.options.wordSeparator = appSettings.interaction.word_separators;
+      terminalRef.current.options.wordSeparator = interaction.word_separators;
     }
-  }, [appSettings.interaction, terminalRef]);
+  }, [interaction.word_separators, terminalRef]);
 }

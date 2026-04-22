@@ -13,7 +13,7 @@ import {
   MdTranslate,
   MdTravelExplore,
 } from "react-icons/md";
-import { useApp } from "@/context/AppContext";
+import { useTerminalAppSettings } from "@/context/AppContext";
 import { MOD } from "@/hooks/useGlobalShortcuts";
 import { readClipboardText } from "@/lib/clipboard";
 import type { SearchEngine } from "@/types/global";
@@ -43,7 +43,7 @@ export default function TerminalContextMenu({
   onFind,
 }: TerminalContextMenuProps) {
   const { t } = useTranslation();
-  const { appSettings } = useApp();
+  const { interaction, translation, search } = useTerminalAppSettings();
 
   const [ctxSelection, setCtxSelection] = useState({ text: "", hasSelection: false });
   const [translateState, setTranslateState] = useState({ open: false, text: "", provider: "" });
@@ -58,23 +58,21 @@ export default function TerminalContextMenu({
   const translationProviders = [
     { id: "google", free: true },
     { id: "microsoft", free: true },
-    { id: "deepl", free: false, configured: !!appSettings.translation.deepl_api_key },
+    { id: "deepl", free: false, configured: !!translation.deepl_api_key },
     {
       id: "baidu",
       free: false,
-      configured: !!(appSettings.translation.baidu_app_id && appSettings.translation.baidu_app_key),
+      configured: !!(translation.baidu_app_id && translation.baidu_app_key),
     },
     {
       id: "ali",
       free: false,
-      configured: !!(appSettings.translation.ali_app_id && appSettings.translation.ali_app_key),
+      configured: !!(translation.ali_app_id && translation.ali_app_key),
     },
     {
       id: "youdao",
       free: false,
-      configured: !!(
-        appSettings.translation.youdao_app_id && appSettings.translation.youdao_app_key
-      ),
+      configured: !!(translation.youdao_app_id && translation.youdao_app_key),
     },
   ].filter((p) => p.free || p.configured);
 
@@ -88,7 +86,7 @@ export default function TerminalContextMenu({
 
     // When right_click_paste is on and nothing is selected, paste directly
     // and prevent the Radix ContextMenu from opening.
-    if (appSettings?.interaction?.right_click_paste && !hasSelection) {
+    if (interaction.right_click_paste && !hasSelection) {
       e.preventDefault();
       e.stopPropagation();
       (async () => {
@@ -184,7 +182,7 @@ export default function TerminalContextMenu({
                   {t("terminalCtx.searchOnline")}
                 </ContextMenuSubTrigger>
                 <ContextMenuSubContent>
-                  {appSettings?.search?.custom_engines
+                  {search.custom_engines
                     ?.filter((engine) => engine.show_in_menu !== false)
                     .map((engine) => {
                       let IconComponent = null;
