@@ -1,6 +1,6 @@
 import { downloadDir } from "@tauri-apps/api/path";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { type ElementType, useCallback, useEffect, useState } from "react";
+import { type ElementType, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MdCancel,
@@ -260,14 +260,18 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
   }, []);
 
   const displayPath = appSettings.transfer.download_path || resolvedDownloadDir;
-  const visibleTransfers = activeSessionId
-    ? transfers.filter(
-        (transfer) =>
-          transfer.sessionId === activeSessionId ||
-          transfer.status === "transferring" ||
-          transfer.status === "paused",
-      )
-    : transfers;
+  const visibleTransfers = useMemo(() => {
+    const filteredTransfers = activeSessionId
+      ? transfers.filter(
+          (transfer) =>
+            transfer.sessionId === activeSessionId ||
+            transfer.status === "transferring" ||
+            transfer.status === "paused",
+        )
+      : transfers;
+
+    return [...filteredTransfers].sort((a, b) => b.timestamp - a.timestamp);
+  }, [activeSessionId, transfers]);
 
   const hasRunning = visibleTransfers.some((transfer) => transfer.status === "transferring");
   const hasPaused = visibleTransfers.some((transfer) => transfer.status === "paused");
