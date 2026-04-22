@@ -2,7 +2,10 @@ import { listen } from "@tauri-apps/api/event";
 import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@/lib/invoke";
-import { normalizeCommandSuggestionMaxChars } from "@/lib/interactionSettings";
+import {
+  normalizeCommandSuggestionMaxChars,
+  normalizeCommandSuggestionMinChars,
+} from "@/lib/interactionSettings";
 import {
   canSuggestFromTracker,
   getTrackedCommand,
@@ -30,6 +33,7 @@ export function useCommandHistory(
   inputStateRef: React.RefObject<TerminalInputState>,
   applySuggestion: (command: string, execute: boolean) => void,
   enabled: boolean,
+  minCommandLength: number,
   maxCommandLength: number,
 ) {
   const [suggestions, setSuggestions] = useState<FuzzyResult[]>([]);
@@ -42,6 +46,7 @@ export function useCommandHistory(
   const showSuggestionsRef = useRef(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const enabledRef = useRef(enabled);
+  const minCommandLengthRef = useRef(normalizeCommandSuggestionMinChars(minCommandLength));
   const maxCommandLengthRef = useRef(normalizeCommandSuggestionMaxChars(maxCommandLength));
   const searchRequestIdRef = useRef(0);
 
@@ -147,6 +152,7 @@ export function useCommandHistory(
           invoke<FuzzyResult[]>("fuzzy_search_history", {
             pattern,
             limit: 8,
+            minCommandLength: minCommandLengthRef.current,
             maxCommandLength: maxCommandLengthRef.current,
           }),
           invoke<FuzzyResult[]>("fuzzy_search_commands", { pattern, limit: 8 }),
@@ -182,7 +188,14 @@ export function useCommandHistory(
   }, [dismissSuggestions, getCursorViewportPosition, inputStateRef]);
 
   useEffect(() => {
-    maxCommandLengthRef.current = normalizeCommandSuggestionMaxChars(maxCommandLength);
+    minCommandLengthRef.current = normalizeCommandSuggestionMinChars(
+      minCommandLength,
+      maxCommandLength,
+    );
+    maxCommandLengthRef.current = normalizeCommandSuggestionMaxChars(
+      maxCommandLength,
+      minCommandLengthRef.current,
+    );
 
     if (!enabledRef.current) return;
     if (!canSuggestFromTracker(inputStateRef.current)) {
@@ -191,7 +204,7 @@ export function useCommandHistory(
     }
 
     triggerSearch();
-  }, [dismissSuggestions, inputStateRef, maxCommandLength, triggerSearch]);
+  }, [dismissSuggestions, inputStateRef, maxCommandLength, minCommandLength, triggerSearch]);
 
   useEffect(() => {
     const refreshSuggestions = () => {

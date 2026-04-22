@@ -412,11 +412,12 @@ impl SessionManager {
         &self,
         pattern: &str,
         limit: usize,
+        min_command_length: Option<usize>,
         max_command_length: Option<usize>,
     ) -> Vec<FuzzyResult> {
         let mut results = {
             let store = self.history_store.lock().await;
-            store.search(pattern, limit, max_command_length)
+            store.search(pattern, limit, min_command_length, max_command_length)
         };
 
         let pending_commands = self.pending_history_candidates().await;
@@ -429,7 +430,14 @@ impl SessionManager {
             .map(|command| (command.as_str(), command.as_str()))
             .collect();
         let pending_results =
-            fuzzy_search_items(&pending_refs, pattern, "history", limit, max_command_length);
+            fuzzy_search_items(
+                &pending_refs,
+                pattern,
+                "history",
+                limit,
+                min_command_length,
+                max_command_length,
+            );
         let mut existing = results
             .iter()
             .map(|result| result.command.clone())
@@ -607,7 +615,7 @@ mod tests {
             .register_command_submission("ssh-2", "docker images".to_string())
             .await;
 
-        let results = manager.fuzzy_search("docker im", 8, None).await;
+        let results = manager.fuzzy_search("docker im", 8, None, None).await;
         assert!(
             results
                 .iter()
@@ -638,7 +646,7 @@ mod tests {
             .confirm_command_submission("ssh-3", "docker ps".to_string())
             .await;
 
-        let results = manager.fuzzy_search("docker im", 8, None).await;
+        let results = manager.fuzzy_search("docker im", 8, None, None).await;
         assert!(
             results
                 .iter()

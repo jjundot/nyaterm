@@ -477,6 +477,7 @@ export interface InteractionSettings {
   copy_on_select: boolean;
   right_click_paste: boolean;
   command_suggestions_enabled: boolean;
+  command_suggestion_min_chars: number;
   command_suggestion_max_chars: number;
   word_separators: string;
   default_encoding: string;

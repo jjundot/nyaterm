@@ -26,6 +26,7 @@ pub fn fuzzy_search_items(
     pattern_str: &str,
     source: &str,
     limit: usize,
+    min_command_length: Option<usize>,
     max_command_length: Option<usize>,
 ) -> Vec<FuzzyResult> {
     let pattern_str = pattern_str.trim();
@@ -49,7 +50,13 @@ pub fn fuzzy_search_items(
 
     let mut scored: Vec<(usize, u32)> = Vec::new();
     for (idx, (display, value)) in items.iter().enumerate() {
-        if max_command_length.is_some_and(|max| value.chars().count() > max) {
+        let value_length = value.chars().count();
+
+        if min_command_length.is_some_and(|min| value_length < min) {
+            continue;
+        }
+
+        if max_command_length.is_some_and(|max| value_length > max) {
             continue;
         }
 

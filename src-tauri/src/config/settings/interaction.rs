@@ -8,12 +8,18 @@ pub struct InteractionSettings {
     pub right_click_paste: bool,
     #[serde(default = "default_true")]
     pub command_suggestions_enabled: bool,
+    #[serde(default = "default_command_suggestion_min_chars")]
+    pub command_suggestion_min_chars: usize,
     #[serde(default = "default_command_suggestion_max_chars")]
     pub command_suggestion_max_chars: usize,
     #[serde(default = "default_word_separators")]
     pub word_separators: String,
     #[serde(default = "default_encoding")]
     pub default_encoding: String,
+}
+
+fn default_command_suggestion_min_chars() -> usize {
+    2
 }
 
 fn default_command_suggestion_max_chars() -> usize {
@@ -37,6 +43,7 @@ impl Default for InteractionSettings {
             copy_on_select: false,
             right_click_paste: false,
             command_suggestions_enabled: true,
+            command_suggestion_min_chars: default_command_suggestion_min_chars(),
             command_suggestion_max_chars: default_command_suggestion_max_chars(),
             word_separators: default_word_separators(),
             default_encoding: default_encoding(),

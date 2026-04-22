@@ -76,6 +76,7 @@ export default function XTerminal({
   const showTimestamps = appSettings.terminal.show_timestamps;
   const showGutter = showLineNumbers || showTimestamps;
   const commandSuggestionsEnabled = appSettings.interaction.command_suggestions_enabled;
+  const commandSuggestionMinChars = appSettings.interaction.command_suggestion_min_chars;
   const commandSuggestionMaxChars = appSettings.interaction.command_suggestion_max_chars;
 
   const inputStateRef = useRef(createTerminalInputState());
@@ -206,6 +207,7 @@ export default function XTerminal({
     inputStateRef,
     applySuggestion,
     commandSuggestionsEnabled,
+    commandSuggestionMinChars,
     commandSuggestionMaxChars,
   );
 

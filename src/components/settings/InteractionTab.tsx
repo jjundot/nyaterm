@@ -6,7 +6,10 @@ import { useApp } from "@/context/AppContext";
 import { MOD } from "@/hooks/useGlobalShortcuts";
 import {
   MAX_COMMAND_SUGGESTION_MAX_CHARS,
+  MAX_COMMAND_SUGGESTION_MIN_CHARS,
+  MIN_COMMAND_SUGGESTION_MIN_CHARS,
   MIN_COMMAND_SUGGESTION_MAX_CHARS,
+  normalizeCommandSuggestionMinChars,
   normalizeCommandSuggestionMaxChars,
 } from "@/lib/interactionSettings";
 import {
@@ -105,24 +108,57 @@ export function InteractionTab() {
           />
         </SettingRow>
 
-        <SettingNumberInput
-          label={t("settings.commandSuggestionsMaxChars")}
-          desc={t("settings.commandSuggestionsMaxCharsDesc")}
-          value={appSettings.interaction.command_suggestion_max_chars}
-          min={MIN_COMMAND_SUGGESTION_MAX_CHARS}
-          max={MAX_COMMAND_SUGGESTION_MAX_CHARS}
-          step={1}
-          disabled={!appSettings.interaction.command_suggestions_enabled}
-          controlClassName="max-w-sm"
-          onChange={(v) =>
-            updateAppSettings({
-              interaction: {
-                ...appSettings.interaction,
-                command_suggestion_max_chars: normalizeCommandSuggestionMaxChars(v),
-              },
-            })
-          }
-        />
+        {appSettings.interaction.command_suggestions_enabled && (
+          <>
+            <SettingNumberInput
+              label={t("settings.commandSuggestionsMinChars")}
+              desc={t("settings.commandSuggestionsMinCharsDesc")}
+              value={appSettings.interaction.command_suggestion_min_chars}
+              min={MIN_COMMAND_SUGGESTION_MIN_CHARS}
+              max={Math.min(
+                MAX_COMMAND_SUGGESTION_MIN_CHARS,
+                appSettings.interaction.command_suggestion_max_chars,
+              )}
+              step={1}
+              controlClassName="max-w-sm"
+              onChange={(v) =>
+                updateAppSettings({
+                  interaction: {
+                    ...appSettings.interaction,
+                    command_suggestion_min_chars: normalizeCommandSuggestionMinChars(
+                      v,
+                      appSettings.interaction.command_suggestion_max_chars,
+                    ),
+                  },
+                })
+              }
+            />
+
+            <SettingNumberInput
+              label={t("settings.commandSuggestionsMaxChars")}
+              desc={t("settings.commandSuggestionsMaxCharsDesc")}
+              value={appSettings.interaction.command_suggestion_max_chars}
+              min={Math.max(
+                MIN_COMMAND_SUGGESTION_MAX_CHARS,
+                appSettings.interaction.command_suggestion_min_chars,
+              )}
+              max={MAX_COMMAND_SUGGESTION_MAX_CHARS}
+              step={1}
+              controlClassName="max-w-sm"
+              onChange={(v) =>
+                updateAppSettings({
+                  interaction: {
+                    ...appSettings.interaction,
+                    command_suggestion_max_chars: normalizeCommandSuggestionMaxChars(
+                      v,
+                      appSettings.interaction.command_suggestion_min_chars,
+                    ),
+                  },
+                })
+              }
+            />
+          </>
+        )}
 
         <SettingInput
           label={t("settings.wordSeparators")}

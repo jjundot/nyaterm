@@ -27,7 +27,10 @@ import {
   updateSplitRatio as updateWorkspaceSplitRatio,
 } from "@/lib/workspaceTabs";
 import { DEFAULT_CLOUD_SYNC_SETTINGS } from "@/lib/cloudSync";
-import { DEFAULT_COMMAND_SUGGESTION_MAX_CHARS } from "@/lib/interactionSettings";
+import {
+  DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,
+  DEFAULT_COMMAND_SUGGESTION_MIN_CHARS,
+} from "@/lib/interactionSettings";
 import type {
   AppSettings,
   Group,
@@ -203,6 +206,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     copy_on_select: false,
     right_click_paste: false,
     command_suggestions_enabled: true,
+    command_suggestion_min_chars: DEFAULT_COMMAND_SUGGESTION_MIN_CHARS,
     command_suggestion_max_chars: DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,
     word_separators: " ()[]{}\"':=,;|&<>",
     default_encoding: "UTF-8",
