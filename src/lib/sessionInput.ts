@@ -1,6 +1,9 @@
 import { invoke } from "./invoke";
 
 const SESSION_INPUT_PREVIEW_EVENT = "dragonfly:session-input-preview";
+const SESSION_COMMAND_HISTORY_EVENT = "dragonfly:session-command-history";
+
+const sessionCommandHistory = new Map<string, string[]>();
 
 export type SessionInputPreview =
   | { kind: "data"; data: string }
@@ -11,6 +14,11 @@ export type SessionInputPreview =
 interface SessionInputPreviewDetail {
   sessionId: string;
   preview: SessionInputPreview;
+}
+
+interface SessionCommandHistoryDetail {
+  sessionId: string;
+  commands: string[];
 }
 
 export interface SendSessionInputOptions {
@@ -56,6 +64,67 @@ export function listenSessionInputPreview(
   };
 }
 
+function emitSessionCommandHistory(sessionId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<SessionCommandHistoryDetail>(SESSION_COMMAND_HISTORY_EVENT, {
+      detail: {
+        sessionId,
+        commands: [...(sessionCommandHistory.get(sessionId) ?? [])],
+      },
+    }),
+  );
+}
+
+export function getSessionCommandHistory(sessionId: string): string[] {
+  return [...(sessionCommandHistory.get(sessionId) ?? [])];
+}
+
+export function listenSessionCommandHistory(
+  sessionId: string,
+  handler: (commands: string[]) => void,
+): () => void {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const listener = (event: Event) => {
+    const customEvent = event as CustomEvent<SessionCommandHistoryDetail>;
+    if (customEvent.detail?.sessionId !== sessionId) {
+      return;
+    }
+    handler(customEvent.detail.commands);
+  };
+
+  window.addEventListener(SESSION_COMMAND_HISTORY_EVENT, listener);
+  return () => {
+    window.removeEventListener(SESSION_COMMAND_HISTORY_EVENT, listener);
+  };
+}
+
+export function registerSessionCommandSubmission(sessionId: string, command: string): void {
+  const normalizedCommand = command.trim();
+  if (!normalizedCommand) {
+    return;
+  }
+
+  const current = sessionCommandHistory.get(sessionId) ?? [];
+  sessionCommandHistory.set(sessionId, [normalizedCommand, ...current]);
+  emitSessionCommandHistory(sessionId);
+}
+
+export function clearSessionCommandHistory(sessionId: string): void {
+  if (!sessionCommandHistory.has(sessionId)) {
+    return;
+  }
+
+  sessionCommandHistory.delete(sessionId);
+  emitSessionCommandHistory(sessionId);
+}
+
 export async function sendSessionInput(
   sessionId: string,
   data: string,
@@ -69,6 +138,7 @@ export async function sendSessionInput(
   await invoke("write_to_session", { sessionId, data });
 
   if (options.registerSubmission) {
+    registerSessionCommandSubmission(sessionId, options.registerSubmission);
     await invoke("register_command_submission", {
       sessionId,
       command: options.registerSubmission,

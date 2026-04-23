@@ -1,37 +1,30 @@
-import { listen } from "@tauri-apps/api/event";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdChevronRight } from "react-icons/md";
 import PanelHeader from "@/components/layout/PanelHeader";
-import { invoke } from "@/lib/invoke";
+import { getSessionCommandHistory, listenSessionCommandHistory } from "@/lib/sessionInput";
 
 interface CommandHistoryProps {
+  activeSessionId: string | null;
   onCommandSend: (command: string) => void;
 }
 
-/** Command history list (polled). Double-click sends command to active tab. */
-function CommandHistory({ onCommandSend }: CommandHistoryProps) {
+/** Command history list scoped to the selected session. */
+function CommandHistory({ activeSessionId, onCommandSend }: CommandHistoryProps) {
   const { t } = useTranslation();
-  const [history, setHistory] = useState<string[]>([]);
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const cmds = await invoke<string[]>("get_command_history");
-      setHistory(cmds);
-    } catch {
-      // Backend might not be ready
-    }
-  }, []);
+  const [history, setHistory] = useState<string[]>(() =>
+    activeSessionId ? getSessionCommandHistory(activeSessionId) : [],
+  );
 
   useEffect(() => {
-    fetchHistory();
-    const unlisten = listen("command-history-changed", () => {
-      fetchHistory();
-    });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  }, [fetchHistory]);
+    if (!activeSessionId) {
+      setHistory([]);
+      return;
+    }
+
+    setHistory(getSessionCommandHistory(activeSessionId));
+    return listenSessionCommandHistory(activeSessionId, setHistory);
+  }, [activeSessionId]);
 
   const handleDoubleClick = useCallback(
     (command: string) => {

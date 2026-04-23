@@ -49,7 +49,7 @@ import { useIdleLock } from "./hooks/useIdleLock";
 import { getErrorMessage, shouldPromptConnectionEditOnFailure } from "./lib/errors";
 import { invoke } from "./lib/invoke";
 import { logger } from "./lib/logger";
-import { sendSessionInput } from "./lib/sessionInput";
+import { clearSessionCommandHistory, sendSessionInput } from "./lib/sessionInput";
 import {
   findTerminalWindowLeafById,
   findTerminalWindowLeafByTabId,
@@ -664,6 +664,7 @@ function App() {
 
       try {
         await invoke("close_session", { sessionId: pane.sessionId });
+        clearSessionCommandHistory(pane.sessionId);
         return true;
       } catch (error) {
         logger.error({
@@ -1220,6 +1221,7 @@ function App() {
       if (!tab || !pane) {
         try {
           await invoke("close_session", { sessionId });
+          clearSessionCommandHistory(sessionId);
         } catch (error) {
           logger.error({
             domain: "session.lifecycle",
@@ -1742,7 +1744,7 @@ function App() {
           />
         );
       case "commandHistory":
-        return <CommandHistory onCommandSend={handleHistoryCommand} />;
+        return <CommandHistory activeSessionId={activeSessionId} onCommandSend={handleHistoryCommand} />;
       case "resourceMonitor":
         return <ResourceMonitor activeSessionId={activeSshSessionId} />;
       default:
