@@ -82,6 +82,122 @@ interface TransferEventPayload {
   remote_path?: string;
 }
 
+interface ResolvedLocalDropPathEntry {
+  path: string;
+  isDir: boolean;
+}
+
+interface ExternalFileDropEventPayload {
+  kind: "enter" | "over" | "leave" | "drop";
+  paths: string[];
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+const EXTERNAL_FILE_DROP_MESSAGE_KIND = "external-file-drop";
+
+type WebView2Bridge = {
+  postMessageWithAdditionalObjects: (message: unknown, additionalObjects: ArrayLike<unknown>) => void;
+};
+
+type DataTransferItemWithFileSystemHandle = DataTransferItem & {
+  getAsFileSystemHandle?: () => Promise<unknown>;
+};
+
+declare global {
+  interface Window {
+    chrome?: {
+      webview?: WebView2Bridge;
+    };
+  }
+}
+
+function getLocalPathName(path: string, fallback: string) {
+  return path.split(/[\\/]/).pop() || fallback;
+}
+
+function buildRemoteUploadPath(remoteDir: string, name: string) {
+  return remoteDir === "/" ? `/${name}` : `${remoteDir}/${name}`;
+}
+
+function isDropPositionInsideElement(
+  position: { x: number; y: number },
+  element: HTMLElement | null,
+) {
+  if (!element) {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  const scale = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const candidates =
+    scale === 1 ? [position] : [position, { x: position.x / scale, y: position.y / scale }];
+
+  return candidates.some(
+    ({ x, y }) => x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
+  );
+}
+
+function isExternalFileDragEvent(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+function getDragEventPosition(event: DragEvent) {
+  return {
+    x: event.clientX,
+    y: event.clientY,
+  };
+}
+
+function getExternalFileDropBridge() {
+  return window.chrome?.webview;
+}
+
+function createExternalFileDropBridgeMessage(position: { x: number; y: number }) {
+  return JSON.stringify({
+    kind: EXTERNAL_FILE_DROP_MESSAGE_KIND,
+    position,
+  });
+}
+
+async function collectExternalDropAdditionalObjects(dataTransfer: DataTransfer | null) {
+  if (!dataTransfer) {
+    return [];
+  }
+
+  const fileItems = Array.from(dataTransfer.items ?? []).filter((item) => item.kind === "file");
+  if (fileItems.length === 0 && dataTransfer.files.length > 0) {
+    return Array.from(dataTransfer.files);
+  }
+
+  const additionalObjects: unknown[] = [];
+  for (const item of fileItems) {
+    const file = item.getAsFile();
+    if (file) {
+      additionalObjects.push(file);
+      continue;
+    }
+
+    const itemWithHandle = item as DataTransferItemWithFileSystemHandle;
+    if (typeof itemWithHandle.getAsFileSystemHandle === "function") {
+      try {
+        const handle = await itemWithHandle.getAsFileSystemHandle();
+        if (handle) {
+          additionalObjects.push(handle);
+          continue;
+        }
+      } catch {
+        // Fall back to File objects if the runtime cannot expose FileSystemHandle.
+      }
+    }
+
+  }
+
+  return additionalObjects;
+}
+
 function getParentPath(path: string) {
   const normalized = path !== "/" && path.endsWith("/") ? path.slice(0, -1) : path;
   const index = normalized.lastIndexOf("/");
@@ -212,10 +328,24 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
   const sessionCacheRef = useRef(fileExplorerSessionCacheStore);
   const prevSessionIdRef = useRef<string | null>(null);
   const pendingManualRefreshUploadsRef = useRef<Set<string>>(new Set());
+  const [isExternalDropActive, setIsExternalDropActive] = useState(false);
 
   filesRef.current = files;
   currentPathRef.current = currentPath;
   homeDirRef.current = homeDir;
+
+  const resetExternalDropHover = useCallback(() => {
+    setIsExternalDropActive(false);
+  }, []);
+
+  const resolveUploadTarget = useCallback(() => {
+    if (!activeSessionId) return null;
+
+    return {
+      sessionId: activeSessionId,
+      remoteDir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+    };
+  }, [activeSessionId]);
 
   useEffect(() => {
     return () => {
@@ -401,7 +531,99 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
     return loadDirectory(targetPath);
   }, [loadDirectory]);
 
+  const uploadLocalEntriesToTarget = useCallback(
+    async (
+      target: { sessionId: string; remoteDir: string },
+      entries: Array<{ path: string; isDir: boolean }>,
+    ) => {
+      if (entries.length === 0) return;
+
+      let refreshAfterUpload = false;
+
+      for (const entry of entries) {
+        if (!entry.path) continue;
+
+        if (entry.isDir) {
+          const folderName = getLocalPathName(entry.path, "uploaded_folder");
+          const remotePath = buildRemoteUploadPath(target.remoteDir, folderName);
+
+          try {
+            await invoke("upload_local_directory", {
+              sessionId: target.sessionId,
+              localPath: entry.path,
+              remotePath,
+            });
+            refreshAfterUpload = true;
+          } catch (error) {
+            logger.error({
+              domain: "transfer.lifecycle",
+              event: "upload.folder_failed",
+              message: "Upload folder failed",
+              ids: { session_id: target.sessionId },
+              data: {
+                local_path: entry.path,
+                remote_path: remotePath,
+              },
+              error,
+            });
+          }
+
+          continue;
+        }
+
+        const fileName = getLocalPathName(entry.path, "uploaded_file");
+        const remotePath = buildRemoteUploadPath(target.remoteDir, fileName);
+        const uploadKey = `${target.sessionId}:${remotePath}`;
+
+        pendingManualRefreshUploadsRef.current.add(uploadKey);
+        try {
+          await invoke("upload_local_file", {
+            sessionId: target.sessionId,
+            localPath: entry.path,
+            remotePath,
+          });
+        } catch (error) {
+          logger.error({
+            domain: "transfer.lifecycle",
+            event: "upload.failed",
+            message: "Upload failed",
+            ids: { session_id: target.sessionId },
+            data: {
+              local_path: entry.path,
+              remote_path: remotePath,
+            },
+            error,
+          });
+          pendingManualRefreshUploadsRef.current.delete(uploadKey);
+        }
+      }
+
+      if (
+        refreshAfterUpload &&
+        activeSessionId === target.sessionId &&
+        normalizeDirectoryPath(currentPathRef.current) === normalizeDirectoryPath(target.remoteDir)
+      ) {
+        void refreshCurrentDirectory();
+      }
+    },
+    [activeSessionId, refreshCurrentDirectory],
+  );
+
+  const resolveLocalDropPaths = useCallback(async (paths: string[]) => {
+    const uniquePaths = Array.from(
+      new Set(paths.map((path) => path.trim()).filter((path) => !!path)),
+    );
+    if (uniquePaths.length === 0) {
+      return [];
+    }
+
+    return invoke<ResolvedLocalDropPathEntry[]>("resolve_local_drop_paths", {
+      paths: uniquePaths,
+    });
+  }, []);
+
   useEffect(() => {
+    resetExternalDropHover();
     const cache = sessionCacheRef.current;
     const prevId = prevSessionIdRef.current;
 
@@ -473,7 +695,7 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, canBrowseFiles, loadDirectory]);
+  }, [activeSessionId, canBrowseFiles, loadDirectory, resetExternalDropHover]);
 
   useEffect(() => {
     if (isEditingPath) {
@@ -511,6 +733,244 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
       unlisten.then((fn) => fn());
     };
   }, [activeSessionId, canBrowseFiles, currentPath, refreshCurrentDirectory]);
+
+  useEffect(() => {
+    const updateExternalDropState = (event: DragEvent) => {
+      if (!isExternalFileDragEvent(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      const isOverDropTarget = isDropPositionInsideElement(
+        getDragEventPosition(event),
+        listContainerRef.current,
+      );
+      const isActive = canBrowseFiles && !!activeSessionId && isOverDropTarget;
+
+      setIsExternalDropActive(isActive);
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = isActive ? "copy" : "none";
+      }
+    };
+
+    const handleWindowDragLeave = (event: DragEvent) => {
+      if (!isExternalFileDragEvent(event)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const leftWindow =
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= window.innerWidth ||
+        event.clientY >= window.innerHeight;
+
+      if (
+        leftWindow ||
+        !isDropPositionInsideElement(getDragEventPosition(event), listContainerRef.current)
+      ) {
+        resetExternalDropHover();
+      }
+    };
+
+    const handleWindowDrop = (event: DragEvent) => {
+      if (!isExternalFileDragEvent(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      const dropPosition = getDragEventPosition(event);
+      const isOverDropTarget = isDropPositionInsideElement(dropPosition, listContainerRef.current);
+      resetExternalDropHover();
+
+      if (!canBrowseFiles || !activeSessionId || !isOverDropTarget) {
+        return;
+      }
+
+      const bridge = getExternalFileDropBridge();
+      if (!bridge?.postMessageWithAdditionalObjects) {
+        logger.warn({
+          domain: "ui.error",
+          event: "file_explorer.external_drop_bridge_unavailable",
+          message: "WebView2 additional-objects bridge is unavailable for external file drop",
+          ids: activeSessionId ? { session_id: activeSessionId } : undefined,
+          data: {
+            remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+          },
+        });
+        toast.error(t("fileExplorer.externalDropPathsRequired"));
+        return;
+      }
+
+      const dataTransfer = event.dataTransfer;
+      if (dataTransfer?.files && dataTransfer.files.length > 0) {
+        try {
+          bridge.postMessageWithAdditionalObjects(
+            createExternalFileDropBridgeMessage(dropPosition),
+            dataTransfer.files,
+          );
+        } catch (error) {
+          logger.error({
+            domain: "ui.error",
+            event: "file_explorer.external_drop_filelist_bridge_failed",
+            message: "Failed to bridge external file drop FileList through WebView2 additional objects",
+            ids: { session_id: activeSessionId },
+            data: {
+              remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+              file_count: dataTransfer.files.length,
+            },
+            error,
+          });
+          toast.error(String(error));
+        }
+        return;
+      }
+
+      void (async () => {
+        try {
+          const additionalObjects = await collectExternalDropAdditionalObjects(dataTransfer);
+          if (additionalObjects.length === 0) {
+            logger.warn({
+              domain: "ui.error",
+              event: "file_explorer.external_drop_objects_unavailable",
+              message: "External file drop did not expose any transferable WebView2 objects",
+              ids: { session_id: activeSessionId },
+              data: {
+                remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+                item_count: dataTransfer?.items.length ?? 0,
+                file_count: dataTransfer?.files.length ?? 0,
+              },
+            });
+            toast.error(t("fileExplorer.externalDropPathsRequired"));
+            return;
+          }
+
+          bridge.postMessageWithAdditionalObjects(
+            createExternalFileDropBridgeMessage(dropPosition),
+            additionalObjects,
+          );
+        } catch (error) {
+          logger.error({
+            domain: "ui.error",
+            event: "file_explorer.external_drop_bridge_failed",
+            message: "Failed to bridge external file drop through WebView2 additional objects",
+            ids: { session_id: activeSessionId },
+            data: {
+              remote_dir: normalizeDirectoryPath(currentPathRef.current) || homeDirRef.current || "/",
+            },
+            error,
+          });
+          toast.error(String(error));
+        }
+      })();
+    };
+
+    const handleWindowBlur = () => {
+      resetExternalDropHover();
+    };
+
+    window.addEventListener("dragenter", updateExternalDropState);
+    window.addEventListener("dragover", updateExternalDropState);
+    window.addEventListener("dragleave", handleWindowDragLeave);
+    window.addEventListener("drop", handleWindowDrop);
+    window.addEventListener("blur", handleWindowBlur);
+
+    return () => {
+      resetExternalDropHover();
+      window.removeEventListener("dragenter", updateExternalDropState);
+      window.removeEventListener("dragover", updateExternalDropState);
+      window.removeEventListener("dragleave", handleWindowDragLeave);
+      window.removeEventListener("drop", handleWindowDrop);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, [activeSessionId, canBrowseFiles, resetExternalDropHover]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const unlistenPromise = listen<ExternalFileDropEventPayload>("external-file-drop", (event) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (event.payload.kind !== "drop") {
+        return;
+      }
+
+      resetExternalDropHover();
+
+      const isOverDropTarget = isDropPositionInsideElement(
+        event.payload.position,
+        listContainerRef.current,
+      );
+
+      if (!canBrowseFiles || !activeSessionId || !isOverDropTarget) {
+        return;
+      }
+
+      const target = resolveUploadTarget();
+      if (!target) {
+        return;
+      }
+      const dropPaths = event.payload.paths;
+
+      void (async () => {
+        try {
+          const resolvedLocalEntries = await resolveLocalDropPaths(dropPaths);
+          if (resolvedLocalEntries.length === 0) {
+            logger.warn({
+              domain: "ui.error",
+              event: "file_explorer.external_drop_paths_unresolved",
+              message: "Native external drop did not resolve to usable local paths",
+              ids: { session_id: target.sessionId },
+              data: {
+                remote_dir: target.remoteDir,
+                path_count: dropPaths.length,
+              },
+            });
+            toast.error(t("fileExplorer.externalDropPathsRequired"));
+            return;
+          }
+
+          await uploadLocalEntriesToTarget(
+            target,
+            resolvedLocalEntries.map((entry) => ({
+              path: entry.path,
+              isDir: entry.isDir,
+            })),
+          );
+        } catch (error) {
+          logger.error({
+            domain: "ui.error",
+            event: "file_explorer.external_drop_failed",
+            message: "Failed to process native external drop paths",
+            ids: { session_id: target.sessionId },
+            data: {
+              remote_dir: target.remoteDir,
+              path_count: dropPaths.length,
+            },
+            error,
+          });
+          toast.error(String(error));
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+      resetExternalDropHover();
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [
+    activeSessionId,
+    canBrowseFiles,
+    resolveLocalDropPaths,
+    resetExternalDropHover,
+    resolveUploadTarget,
+    t,
+    uploadLocalEntriesToTarget,
+  ]);
 
   const getRangeSelection = useCallback(
     (
@@ -918,68 +1378,48 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
   };
 
   const handleUploadFiles = async () => {
-    if (!activeSessionId) return;
+    const target = resolveUploadTarget();
+    if (!target) return;
+
     try {
       const localPaths = await openDialog({ multiple: true, directory: false });
       if (!localPaths) return;
-      const pathList = Array.isArray(localPaths) ? localPaths : [localPaths];
-      for (const localPath of pathList) {
-        if (typeof localPath !== "string") continue;
-        const fileName = localPath.split(/[\\/]/).pop() || "uploaded_file";
-        const remotePath = currentPath === "/" ? `/${fileName}` : `${currentPath}/${fileName}`;
-        const uploadKey = `${activeSessionId}:${remotePath}`;
-
-        pendingManualRefreshUploadsRef.current.add(uploadKey);
-        try {
-          await invoke("upload_local_file", {
-            sessionId: activeSessionId,
-            localPath,
-            remotePath,
-          });
-        } catch (e) {
-          logger.error({
-            domain: "transfer.lifecycle",
-            event: "upload.failed",
-            message: "Upload failed",
-            ids: { session_id: activeSessionId },
-            error: e,
-          });
-          pendingManualRefreshUploadsRef.current.delete(uploadKey);
-        }
-      }
-    } catch (e) {
+      const pathList = (Array.isArray(localPaths) ? localPaths : [localPaths]).filter(
+        (localPath): localPath is string => typeof localPath === "string",
+      );
+      await uploadLocalEntriesToTarget(
+        target,
+        pathList.map((path) => ({
+          path,
+          isDir: false,
+        })),
+      );
+    } catch (error) {
       logger.error({
         domain: "transfer.lifecycle",
         event: "upload.selection_failed",
         message: "Upload selection failed",
-        ids: { session_id: activeSessionId },
-        error: e,
+        ids: { session_id: target.sessionId },
+        error,
       });
     }
   };
 
   const handleUploadFolder = async () => {
-    if (!activeSessionId) return;
+    const target = resolveUploadTarget();
+    if (!target) return;
+
     try {
       const localDir = await openDialog({ directory: true });
       if (!localDir || typeof localDir !== "string") return;
-
-      const folderName = localDir.split(/[\\/]/).pop() || "uploaded_folder";
-      const remotePath = currentPath === "/" ? `/${folderName}` : `${currentPath}/${folderName}`;
-
-      await invoke("upload_local_directory", {
-        sessionId: activeSessionId,
-        localPath: localDir,
-        remotePath,
-      });
-      void refreshCurrentDirectory();
-    } catch (e) {
+      await uploadLocalEntriesToTarget(target, [{ path: localDir, isDir: true }]);
+    } catch (error) {
       logger.error({
         domain: "transfer.lifecycle",
         event: "upload.folder_failed",
         message: "Upload folder failed",
-        ids: { session_id: activeSessionId },
-        error: e,
+        ids: { session_id: target.sessionId },
+        error,
       });
     }
   };
@@ -1186,7 +1626,7 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
         <ContextMenuTrigger asChild>
           <div
             ref={listContainerRef}
-            className="flex-1 overflow-y-auto p-2 text-sm terminal-scroll outline-none"
+            className="relative flex-1 overflow-y-auto p-2 text-sm terminal-scroll outline-none"
             tabIndex={canBrowseFiles ? 0 : -1}
             onMouseDown={() => {
               if (canBrowseFiles) {
@@ -1195,6 +1635,18 @@ export default function FileExplorer({ activeSessionId, activeSessionType }: Fil
             }}
             onKeyDown={handleListKeyDown}
           >
+            {isExternalDropActive && canBrowseFiles && (
+              <div
+                className="pointer-events-none absolute inset-3 z-10 flex items-center justify-center rounded-lg border-2 border-dashed px-4 text-center text-xs font-medium"
+                style={{
+                  borderColor: "var(--df-primary)",
+                  backgroundColor: "rgba(59, 130, 246, 0.12)",
+                  color: "var(--df-text)",
+                }}
+              >
+                {t("fileExplorer.externalDropOverlay")}
+              </div>
+            )}
             {!activeSessionId ? (
               <div className="text-center py-8 text-xs" style={{ color: "var(--df-text-dimmed)" }}>
                 <MdFolderOff className="text-xl block mx-auto mb-2" />

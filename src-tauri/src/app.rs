@@ -3,6 +3,27 @@ use tauri::Manager;
 
 use crate::core::{CloudSyncManager, QuickCommandsStore, SessionManager};
 
+fn create_main_window(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    if app.get_webview_window("main").is_some() {
+        return Ok(());
+    }
+
+    let main_window_config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .cloned()
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "main window config not found")
+        })?;
+
+    let _ = tauri::WebviewWindowBuilder::from_config(app, &main_window_config)?.build()?;
+
+    Ok(())
+}
+
 pub fn setup(
     app: &mut tauri::App,
     session_manager: Arc<SessionManager>,
@@ -64,6 +85,16 @@ pub fn setup(
         }
     });
 
+    create_main_window(app)?;
+    let main_window = app.get_webview_window("main").ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "main window was not created")
+    })?;
+    if let Err(error) = crate::platform::install_external_file_drop_bridge(&main_window) {
+        tracing::warn!(
+            "Failed to install Windows external file drop bridge for main window: {}",
+            error
+        );
+    }
     crate::tray::setup(app)?;
 
     Ok(())

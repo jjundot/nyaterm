@@ -6,6 +6,7 @@ mod config;
 mod core;
 mod error;
 mod observability;
+mod platform;
 mod tray;
 mod utils;
 
@@ -38,6 +39,7 @@ pub fn run() {
         .on_window_event(app::on_window_event)
         .invoke_handler(tauri::generate_handler![
             cmd::app::quit_application,
+            cmd::app::resolve_local_drop_paths,
             cmd::clipboard::read_clipboard_text,
             cmd::log::append_frontend_logs,
             cmd::log::export_diagnostics,

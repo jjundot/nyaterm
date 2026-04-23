@@ -1489,6 +1489,8 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "uuid",
+ "webview2-com",
+ "windows 0.61.3",
  "zip 8.2.0",
 ]
 

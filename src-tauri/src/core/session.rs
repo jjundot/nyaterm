@@ -429,15 +429,14 @@ impl SessionManager {
             .iter()
             .map(|command| (command.as_str(), command.as_str()))
             .collect();
-        let pending_results =
-            fuzzy_search_items(
-                &pending_refs,
-                pattern,
-                "history",
-                limit,
-                min_command_length,
-                max_command_length,
-            );
+        let pending_results = fuzzy_search_items(
+            &pending_refs,
+            pattern,
+            "history",
+            limit,
+            min_command_length,
+            max_command_length,
+        );
         let mut existing = results
             .iter()
             .map(|result| result.command.clone())
