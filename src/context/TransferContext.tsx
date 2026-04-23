@@ -1,9 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { invoke } from "@/lib/invoke";
 
 export type TransferDirection = "upload" | "download";
+export type TransferKind = "file" | "directory";
 export type TransferStatus = "transferring" | "paused" | "completed" | "error" | "cancelled";
 
 export interface TransferItem {
@@ -13,10 +15,14 @@ export interface TransferItem {
   remotePath: string;
   localPath: string;
   direction: TransferDirection;
+  kind: TransferKind;
+  parentId?: string;
   status: TransferStatus;
   size: number;
   bytesTransferred: number;
   totalSize: number;
+  itemCountTotal?: number;
+  itemCountCompleted?: number;
   error?: string;
   timestamp: number;
 }
@@ -42,14 +48,19 @@ interface TransferEventPayload {
   remote_path: string;
   local_path: string;
   direction: string;
+  kind?: string;
+  parent_id?: string;
   status: string;
   size: number;
   bytes_transferred: number;
   total_size: number;
+  item_count_total?: number;
+  item_count_completed?: number;
   error_msg?: string;
 }
 
 export function TransferProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [transferMap, setTransferMap] = useState<Map<string, TransferItem>>(() => new Map());
 
   const transfers = useMemo(() => Array.from(transferMap.values()), [transferMap]);
@@ -57,8 +68,12 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unlisten = listen<TransferEventPayload>("transfer-event", (e) => {
       const p = e.payload;
+      const kind = (p.kind ?? "file") as TransferKind;
 
       if (p.status === "started") {
+        if (p.parent_id) {
+          return;
+        }
         setTransferMap((prev) => {
           const next = new Map(prev);
           next.set(p.id, {
@@ -68,39 +83,96 @@ export function TransferProvider({ children }: { children: ReactNode }) {
             remotePath: p.remote_path,
             localPath: p.local_path,
             direction: p.direction as TransferDirection,
+            kind,
+            parentId: p.parent_id,
             status: "transferring",
             size: 0,
             bytesTransferred: 0,
             totalSize: p.total_size,
+            itemCountTotal: p.item_count_total,
+            itemCountCompleted: p.item_count_completed,
             timestamp: Date.now(),
           });
           return next;
         });
-      } else {
-        setTransferMap((prev) => {
-          const existing = prev.get(p.id);
-          if (!existing) return prev;
-          const next = new Map(prev);
-          if (p.status === "progress") {
-            next.set(p.id, { ...existing, bytesTransferred: p.bytes_transferred, totalSize: p.total_size });
-          } else if (p.status === "paused") {
-            next.set(p.id, { ...existing, status: "paused", bytesTransferred: p.bytes_transferred, totalSize: p.total_size });
-          } else if (p.status === "resumed") {
-            next.set(p.id, { ...existing, status: "transferring", bytesTransferred: p.bytes_transferred, totalSize: p.total_size });
-          } else if (p.status === "cancelled") {
-            next.set(p.id, { ...existing, status: "cancelled", bytesTransferred: p.bytes_transferred, totalSize: p.total_size, error: undefined });
-          } else {
-            next.set(p.id, { ...existing, status: p.status as TransferStatus, size: p.size, bytesTransferred: p.bytes_transferred, totalSize: p.total_size, error: p.error_msg });
-          }
-          return next;
-        });
+        return;
+      }
+
+      setTransferMap((prev) => {
+        const existing = prev.get(p.id);
+        if (!existing) return prev;
+        const next = new Map(prev);
+        let updated: TransferItem;
+
+        if (p.status === "progress") {
+          updated = {
+            ...existing,
+            bytesTransferred: p.bytes_transferred,
+            totalSize: p.total_size,
+            itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
+            itemCountCompleted: p.item_count_completed ?? existing.itemCountCompleted,
+          };
+        } else if (p.status === "paused") {
+          updated = {
+            ...existing,
+            status: "paused",
+            bytesTransferred: p.bytes_transferred,
+            totalSize: p.total_size,
+            itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
+            itemCountCompleted: p.item_count_completed ?? existing.itemCountCompleted,
+          };
+        } else if (p.status === "resumed") {
+          updated = {
+            ...existing,
+            status: "transferring",
+            bytesTransferred: p.bytes_transferred,
+            totalSize: p.total_size,
+            itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
+            itemCountCompleted: p.item_count_completed ?? existing.itemCountCompleted,
+          };
+        } else if (p.status === "cancelled") {
+          updated = {
+            ...existing,
+            status: "cancelled",
+            bytesTransferred: p.bytes_transferred,
+            totalSize: p.total_size,
+            itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
+            itemCountCompleted: p.item_count_completed ?? existing.itemCountCompleted,
+            error: undefined,
+          };
+        } else {
+          updated = {
+            ...existing,
+            status: p.status as TransferStatus,
+            size: p.size,
+            bytesTransferred: p.bytes_transferred,
+            totalSize: p.total_size,
+            itemCountTotal: p.item_count_total ?? existing.itemCountTotal,
+            itemCountCompleted: p.item_count_completed ?? existing.itemCountCompleted,
+            error: p.error_msg,
+          };
+        }
+
+        next.set(p.id, updated);
+        return next;
+      });
+
+      if (p.status === "completed" && p.direction === "download" && !p.parent_id) {
+        toast.success(
+          kind === "directory"
+            ? t("fileTransfer.downloadFolderCompleted")
+            : t("fileTransfer.downloadCompleted"),
+          {
+            description: p.local_path,
+          },
+        );
       }
     });
 
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [t]);
 
   const clearCompleted = useCallback(() => {
     setTransferMap((prev) => {
@@ -152,10 +224,24 @@ export function TransferProvider({ children }: { children: ReactNode }) {
   const retryTransfer = useCallback(async (item: TransferItem) => {
     try {
       if (item.direction === "upload") {
-        await invoke("upload_local_file", {
+        if (item.kind === "directory") {
+          await invoke("upload_local_directory", {
+            sessionId: item.sessionId,
+            localPath: item.localPath,
+            remotePath: item.remotePath,
+          });
+        } else {
+          await invoke("upload_local_file", {
+            sessionId: item.sessionId,
+            localPath: item.localPath,
+            remotePath: item.remotePath,
+          });
+        }
+      } else if (item.kind === "directory") {
+        await invoke("download_remote_directory", {
           sessionId: item.sessionId,
-          localPath: item.localPath,
           remotePath: item.remotePath,
+          localPath: item.localPath,
         });
       } else {
         await invoke("download_remote_file", {

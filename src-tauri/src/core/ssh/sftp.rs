@@ -11,6 +11,7 @@ use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tokio::sync::Notify;
@@ -34,11 +35,19 @@ pub struct TransferEvent {
     pub local_path: String,
     /// "upload" or "download"
     pub direction: String,
+    /// "file" or "directory"
+    pub kind: String,
     /// "started", "progress", "paused", "resumed", "completed", "cancelled", or "error"
     pub status: String,
     pub size: u64,
     pub bytes_transferred: u64,
     pub total_size: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_count_total: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_count_completed: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_msg: Option<String>,
 }
@@ -83,8 +92,12 @@ struct TransferRuntime {
     remote_path: String,
     local_path: String,
     direction: String,
+    kind: String,
+    parent_id: Option<String>,
     bytes_transferred: u64,
     total_size: u64,
+    item_count_total: Option<u64>,
+    item_count_completed: Option<u64>,
     control_state: TransferControlState,
 }
 
@@ -95,13 +108,17 @@ struct TransferController {
 }
 
 impl TransferController {
-    fn new(
+    fn new_with_kind(
         id: String,
         session_id: String,
         file_name: String,
         remote_path: String,
         local_path: String,
         direction: String,
+        kind: String,
+        parent_id: Option<String>,
+        item_count_total: Option<u64>,
+        item_count_completed: Option<u64>,
     ) -> Self {
         Self {
             runtime: Mutex::new(TransferRuntime {
@@ -111,8 +128,12 @@ impl TransferController {
                 remote_path,
                 local_path,
                 direction,
+                kind,
+                parent_id,
                 bytes_transferred: 0,
                 total_size: 0,
+                item_count_total,
+                item_count_completed,
                 control_state: TransferControlState::Running,
             }),
             notify: Notify::new(),
@@ -129,6 +150,12 @@ impl TransferController {
         runtime.total_size = total_size;
     }
 
+    fn update_item_progress(&self, completed: u64, total: u64) {
+        let mut runtime = self.runtime.lock().unwrap();
+        runtime.item_count_completed = Some(completed);
+        runtime.item_count_total = Some(total);
+    }
+
     fn build_event(&self, status: &str, size: u64, error_msg: Option<String>) -> TransferEvent {
         let runtime = self.runtime.lock().unwrap();
         TransferEvent {
@@ -138,10 +165,14 @@ impl TransferController {
             remote_path: runtime.remote_path.clone(),
             local_path: runtime.local_path.clone(),
             direction: runtime.direction.clone(),
+            kind: runtime.kind.clone(),
             status: status.to_string(),
             size,
             bytes_transferred: runtime.bytes_transferred,
             total_size: runtime.total_size,
+            parent_id: runtime.parent_id.clone(),
+            item_count_total: runtime.item_count_total,
+            item_count_completed: runtime.item_count_completed,
             error_msg,
         }
     }
@@ -205,6 +236,58 @@ pub(crate) fn active_transfer_count() -> usize {
     ACTIVE_TRANSFERS.lock().unwrap().len()
 }
 
+fn file_name_from_path(path: &str) -> String {
+    path.split(['/', '\\'])
+        .filter(|segment| !segment.is_empty())
+        .next_back()
+        .unwrap_or(path)
+        .to_string()
+}
+
+fn create_directory_transfer_controller(
+    session_id: &str,
+    display_name: String,
+    remote_path: &str,
+    local_path: &str,
+    direction: &str,
+    item_count_total: u64,
+) -> Arc<TransferController> {
+    Arc::new(TransferController::new_with_kind(
+        uuid::Uuid::new_v4().to_string(),
+        session_id.to_string(),
+        display_name,
+        remote_path.to_string(),
+        local_path.to_string(),
+        direction.to_string(),
+        "directory".to_string(),
+        None,
+        Some(item_count_total),
+        Some(0),
+    ))
+}
+
+fn create_child_file_transfer_controller(
+    session_id: &str,
+    file_name: String,
+    remote_path: &str,
+    local_path: &str,
+    direction: &str,
+    parent_id: Option<String>,
+) -> Arc<TransferController> {
+    Arc::new(TransferController::new_with_kind(
+        uuid::Uuid::new_v4().to_string(),
+        session_id.to_string(),
+        file_name,
+        remote_path.to_string(),
+        local_path.to_string(),
+        direction.to_string(),
+        "file".to_string(),
+        parent_id,
+        None,
+        None,
+    ))
+}
+
 async fn wait_for_transfer_ready(controller: &Arc<TransferController>) -> AppResult<()> {
     loop {
         let notified = controller.notify.notified();
@@ -218,10 +301,72 @@ async fn wait_for_transfer_ready(controller: &Arc<TransferController>) -> AppRes
     }
 }
 
+async fn wait_for_transfer_chain(
+    controller: &Arc<TransferController>,
+    parent_controller: Option<&Arc<TransferController>>,
+) -> AppResult<()> {
+    if let Some(parent) = parent_controller {
+        wait_for_transfer_ready(parent).await?;
+    }
+    wait_for_transfer_ready(controller).await
+}
+
 async fn cleanup_cancelled_download(local_path: &str) {
     if tokio::fs::remove_file(local_path).await.is_err() {
         let _ = tokio::fs::remove_dir_all(local_path).await;
     }
+}
+
+async fn count_remote_files(
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    remote_path: &str,
+) -> AppResult<u64> {
+    let mut count = 0;
+    let mut stack = vec![remote_path.to_string()];
+
+    while let Some(path) = stack.pop() {
+        let entries = list_remote_dir(manager.clone(), session_id, &path).await?;
+        for entry in entries {
+            let child_remote = format!("{}/{}", path.trim_end_matches('/'), entry.name);
+            if entry.is_dir {
+                stack.push(child_remote);
+            } else if !entry.is_symlink {
+                count += 1;
+            }
+        }
+    }
+
+    Ok(count)
+}
+
+async fn count_local_files(local_path: &str) -> AppResult<u64> {
+    let mut count = 0;
+    let mut stack = vec![PathBuf::from(local_path)];
+
+    while let Some(path) = stack.pop() {
+        let mut read_dir = tokio::fs::read_dir(&path)
+            .await
+            .map_err(|e| AppError::Channel(format!("Failed to read local dir: {}", e)))?;
+
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| AppError::Channel(format!("Failed to read dir entry: {}", e)))?
+        {
+            let file_type = entry
+                .file_type()
+                .await
+                .map_err(|e| AppError::Channel(format!("Failed to get file type: {}", e)))?;
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                count += 1;
+            }
+        }
+    }
+
+    Ok(count)
 }
 
 async fn cleanup_cancelled_upload(
@@ -558,10 +703,14 @@ pub async fn download_remote_file(
                         remote_path: remote_path.to_string(),
                         local_path: local_path.to_string(),
                         direction: "download".to_string(),
+                        kind: "file".to_string(),
                         status: "completed".to_string(),
                         size: 0,
                         bytes_transferred: 0,
                         total_size: 0,
+                        parent_id: None,
+                        item_count_total: None,
+                        item_count_completed: None,
                         error_msg: None,
                     },
                 );
@@ -587,13 +736,22 @@ pub async fn download_remote_file(
                 client_timestamp: None,
             });
         }
-        match download_remote_file_inner(
+        match download_remote_file_inner_with_controller(
             &app,
             &manager,
             session_id,
             remote_path,
             &actual_local_path,
             &transfer_settings,
+            create_child_file_transfer_controller(
+                session_id,
+                file_name_from_path(remote_path),
+                remote_path,
+                &actual_local_path,
+                "download",
+                None,
+            ),
+            None,
         )
         .await
         {
@@ -637,33 +795,21 @@ fn resolve_local_path(local_path: &str, strategy: &str) -> Option<String> {
     }
 }
 
-async fn download_remote_file_inner(
+async fn download_remote_file_inner_with_controller(
     app: &tauri::AppHandle,
     manager: &SessionManager,
     session_id: &str,
     remote_path: &str,
     actual_path: &str,
     ts: &crate::config::TransferSettings,
+    controller: Arc<TransferController>,
+    parent_controller: Option<Arc<TransferController>>,
 ) -> AppResult<()> {
     use std::io::SeekFrom;
     use std::time::{Duration, Instant};
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
     use tokio::task::JoinSet;
 
-    let file_name = remote_path
-        .split('/')
-        .last()
-        .unwrap_or(remote_path)
-        .to_string();
-    let transfer_id = uuid::Uuid::new_v4().to_string();
-    let controller = Arc::new(TransferController::new(
-        transfer_id,
-        session_id.to_string(),
-        file_name,
-        remote_path.to_string(),
-        actual_path.to_string(),
-        "download".to_string(),
-    ));
     register_transfer(controller.clone());
     let _ = app.emit(
         "transfer-event",
@@ -720,7 +866,7 @@ async fn download_remote_file_inner(
                 if next_offset >= total_size {
                     break;
                 }
-                wait_for_transfer_ready(&controller).await?;
+                wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                 let len = chunk_size.min(total_size - next_offset) as usize;
                 let offset = next_offset;
                 next_offset += len as u64;
@@ -739,7 +885,7 @@ async fn download_remote_file_inner(
             }
 
             while let Some(res) = join_set.join_next().await {
-                wait_for_transfer_ready(&controller).await?;
+                wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                 let (chunk_offset, data, fh) =
                     res.map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
 
@@ -764,7 +910,7 @@ async fn download_remote_file_inner(
                 }
 
                 if next_offset < total_size {
-                    wait_for_transfer_ready(&controller).await?;
+                    wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                     let len = chunk_size.min(total_size - next_offset) as usize;
                     let offset = next_offset;
                     next_offset += len as u64;
@@ -791,7 +937,7 @@ async fn download_remote_file_inner(
             let seq_chunk = (chunk_size as usize).max(64 * 1024);
             let mut buf = vec![0u8; seq_chunk];
             loop {
-                wait_for_transfer_ready(&controller).await?;
+                wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                 let n = remote_file
                     .read(&mut buf)
                     .await
@@ -898,10 +1044,14 @@ pub async fn upload_local_file(
                     remote_path: remote_path.to_string(),
                     local_path: local_path.to_string(),
                     direction: "upload".to_string(),
+                    kind: "file".to_string(),
                     status: "completed".to_string(),
                     size: 0,
                     bytes_transferred: 0,
                     total_size: 0,
+                    parent_id: None,
+                    item_count_total: None,
+                    item_count_completed: None,
                     error_msg: None,
                 },
             );
@@ -929,13 +1079,22 @@ pub async fn upload_local_file(
                 client_timestamp: None,
             });
         }
-        match upload_local_file_inner(
+        match upload_local_file_inner_with_controller(
             &app,
             &manager,
             session_id,
             local_path,
             &actual_remote_path,
             &transfer_settings,
+            create_child_file_transfer_controller(
+                session_id,
+                file_name_from_path(&actual_remote_path),
+                &actual_remote_path,
+                local_path,
+                "upload",
+                None,
+            ),
+            None,
         )
         .await
         {
@@ -990,33 +1149,21 @@ async fn resolve_remote_path(
     }
 }
 
-async fn upload_local_file_inner(
+async fn upload_local_file_inner_with_controller(
     app: &tauri::AppHandle,
     manager: &SessionManager,
     session_id: &str,
     local_path: &str,
     remote_path: &str,
     ts: &crate::config::TransferSettings,
+    controller: Arc<TransferController>,
+    parent_controller: Option<Arc<TransferController>>,
 ) -> AppResult<()> {
     use std::io::SeekFrom;
     use std::time::{Duration, Instant};
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
     use tokio::task::JoinSet;
 
-    let file_name = remote_path
-        .split('/')
-        .last()
-        .unwrap_or(remote_path)
-        .to_string();
-    let transfer_id = uuid::Uuid::new_v4().to_string();
-    let controller = Arc::new(TransferController::new(
-        transfer_id,
-        session_id.to_string(),
-        file_name,
-        remote_path.to_string(),
-        local_path.to_string(),
-        "upload".to_string(),
-    ));
     register_transfer(controller.clone());
     let _ = app.emit(
         "transfer-event",
@@ -1068,7 +1215,7 @@ async fn upload_local_file_inner(
                 if next_offset >= total_size {
                     break;
                 }
-                wait_for_transfer_ready(&controller).await?;
+                wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                 let len = chunk_size.min((total_size - next_offset) as usize);
                 let offset = next_offset;
                 next_offset += len as u64;
@@ -1097,7 +1244,7 @@ async fn upload_local_file_inner(
             }
 
             while let Some(res) = join_set.join_next().await {
-                wait_for_transfer_ready(&controller).await?;
+                wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                 let (written, local_fh, remote_fh) =
                     res.map_err(|e| AppError::Channel(format!("Task panicked: {}", e)))??;
 
@@ -1113,7 +1260,7 @@ async fn upload_local_file_inner(
                 }
 
                 if next_offset < total_size {
-                    wait_for_transfer_ready(&controller).await?;
+                    wait_for_transfer_chain(&controller, parent_controller.as_ref()).await?;
                     let len = chunk_size.min((total_size - next_offset) as usize);
                     let offset = next_offset;
                     next_offset += len as u64;
@@ -1369,15 +1516,17 @@ async fn apply_remote_mode_after_create(
     }
 }
 
-/// Recursively downloads a remote directory to a local path, preserving structure.
-/// Emits per-file `transfer-event` payloads so the transfer panel tracks progress.
-pub async fn download_remote_directory(
-    app: tauri::AppHandle,
+async fn download_remote_directory_inner(
+    app: &tauri::AppHandle,
     manager: Arc<SessionManager>,
     session_id: &str,
     remote_path: &str,
     local_path: &str,
+    directory_controller: Arc<TransferController>,
+    completed_count: &mut u64,
 ) -> AppResult<()> {
+    wait_for_transfer_ready(&directory_controller).await?;
+
     tokio::fs::create_dir_all(local_path)
         .await
         .map_err(|e| AppError::Channel(format!("Failed to create local dir: {}", e)))?;
@@ -1385,43 +1534,138 @@ pub async fn download_remote_directory(
     let entries = list_remote_dir(manager.clone(), session_id, remote_path).await?;
 
     for entry in entries {
+        wait_for_transfer_ready(&directory_controller).await?;
+
         let child_remote = format!("{}/{}", remote_path.trim_end_matches('/'), entry.name);
         let child_local = format!("{}/{}", local_path.trim_end_matches('/'), entry.name);
 
         if entry.is_dir {
-            Box::pin(download_remote_directory(
-                app.clone(),
+            Box::pin(download_remote_directory_inner(
+                app,
                 manager.clone(),
                 session_id,
                 &child_remote,
                 &child_local,
+                directory_controller.clone(),
+                completed_count,
             ))
             .await?;
         } else if !entry.is_symlink {
-            download_remote_file(
-                app.clone(),
-                manager.clone(),
+            let child_controller = create_child_file_transfer_controller(
+                session_id,
+                entry.name.clone(),
+                &child_remote,
+                &child_local,
+                "download",
+                Some(directory_controller.id()),
+            );
+            download_remote_file_inner_with_controller(
+                app,
+                manager.as_ref(),
                 session_id,
                 &child_remote,
                 &child_local,
+                &crate::config::load_app_settings(app)
+                    .map(|s| s.transfer)
+                    .unwrap_or_default(),
+                child_controller,
+                Some(directory_controller.clone()),
             )
             .await?;
+            *completed_count += 1;
+            let total = directory_controller
+                .runtime
+                .lock()
+                .unwrap()
+                .item_count_total
+                .unwrap_or(*completed_count);
+            directory_controller.update_item_progress(*completed_count, total);
+            let _ = app.emit(
+                "transfer-event",
+                &directory_controller.build_event("progress", 0, None),
+            );
         }
     }
 
     Ok(())
 }
 
-/// Recursively uploads a local directory to a remote path, preserving structure.
-/// Emits per-file `transfer-event` payloads so the transfer panel tracks progress.
-pub async fn upload_local_directory(
+/// Recursively downloads a remote directory to a local path, preserving structure.
+/// Emits a directory-level `transfer-event` payload so the transfer panel tracks folder progress.
+pub async fn download_remote_directory(
     app: tauri::AppHandle,
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    remote_path: &str,
+    local_path: &str,
+) -> AppResult<()> {
+    let total_files = count_remote_files(manager.clone(), session_id, remote_path).await?;
+    let directory_controller = create_directory_transfer_controller(
+        session_id,
+        file_name_from_path(remote_path),
+        remote_path,
+        local_path,
+        "download",
+        total_files,
+    );
+    register_transfer(directory_controller.clone());
+    let _ = app.emit(
+        "transfer-event",
+        &directory_controller.build_event("started", 0, None),
+    );
+
+    let mut completed_count = 0;
+    let result = download_remote_directory_inner(
+        &app,
+        manager,
+        session_id,
+        remote_path,
+        local_path,
+        directory_controller.clone(),
+        &mut completed_count,
+    )
+    .await;
+
+    match result {
+        Ok(()) => {
+            directory_controller.update_item_progress(completed_count, total_files);
+            let _ = app.emit(
+                "transfer-event",
+                &directory_controller.build_event("completed", 0, None),
+            );
+            unregister_transfer(&directory_controller.id());
+            Ok(())
+        }
+        Err(e) => {
+            if matches!(e, AppError::Cancelled(_)) {
+                let _ = app.emit(
+                    "transfer-event",
+                    &directory_controller.build_event("cancelled", 0, None),
+                );
+                cleanup_cancelled_download(local_path).await;
+            } else {
+                let _ = app.emit(
+                    "transfer-event",
+                    &directory_controller.build_event("error", 0, Some(e.to_string())),
+                );
+            }
+            unregister_transfer(&directory_controller.id());
+            Err(e)
+        }
+    }
+}
+
+async fn upload_local_directory_inner(
+    app: &tauri::AppHandle,
     manager: Arc<SessionManager>,
     session_id: &str,
     local_path: &str,
     remote_path: &str,
+    directory_controller: Arc<TransferController>,
+    completed_count: &mut u64,
 ) -> AppResult<()> {
-    // Create the remote directory
+    wait_for_transfer_ready(&directory_controller).await?;
+
     let sftp = open_sftp(&manager, session_id).await?;
     let _ = sftp.create_dir(remote_path).await;
     let _ = sftp.close().await;
@@ -1435,6 +1679,8 @@ pub async fn upload_local_directory(
         .await
         .map_err(|e| AppError::Channel(format!("Failed to read dir entry: {}", e)))?
     {
+        wait_for_transfer_ready(&directory_controller).await?;
+
         let file_type = entry
             .file_type()
             .await
@@ -1448,27 +1694,119 @@ pub async fn upload_local_directory(
         let child_remote = format!("{}/{}", remote_path.trim_end_matches('/'), entry_name);
 
         if file_type.is_dir() {
-            Box::pin(upload_local_directory(
-                app.clone(),
+            Box::pin(upload_local_directory_inner(
+                app,
                 manager.clone(),
                 session_id,
                 &child_local,
                 &child_remote,
+                directory_controller.clone(),
+                completed_count,
             ))
             .await?;
         } else if file_type.is_file() {
-            upload_local_file(
-                app.clone(),
-                manager.clone(),
+            let child_controller = create_child_file_transfer_controller(
+                session_id,
+                entry_name,
+                &child_remote,
+                &child_local,
+                "upload",
+                Some(directory_controller.id()),
+            );
+            upload_local_file_inner_with_controller(
+                app,
+                manager.as_ref(),
                 session_id,
                 &child_local,
                 &child_remote,
+                &crate::config::load_app_settings(app)
+                    .map(|s| s.transfer)
+                    .unwrap_or_default(),
+                child_controller,
+                Some(directory_controller.clone()),
             )
             .await?;
+            *completed_count += 1;
+            let total = directory_controller
+                .runtime
+                .lock()
+                .unwrap()
+                .item_count_total
+                .unwrap_or(*completed_count);
+            directory_controller.update_item_progress(*completed_count, total);
+            let _ = app.emit(
+                "transfer-event",
+                &directory_controller.build_event("progress", 0, None),
+            );
         }
     }
 
     Ok(())
+}
+
+/// Recursively uploads a local directory to a remote path, preserving structure.
+/// Emits a directory-level `transfer-event` payload so the transfer panel tracks folder progress.
+pub async fn upload_local_directory(
+    app: tauri::AppHandle,
+    manager: Arc<SessionManager>,
+    session_id: &str,
+    local_path: &str,
+    remote_path: &str,
+) -> AppResult<()> {
+    let total_files = count_local_files(local_path).await?;
+    let directory_controller = create_directory_transfer_controller(
+        session_id,
+        file_name_from_path(local_path),
+        remote_path,
+        local_path,
+        "upload",
+        total_files,
+    );
+    register_transfer(directory_controller.clone());
+    let _ = app.emit(
+        "transfer-event",
+        &directory_controller.build_event("started", 0, None),
+    );
+
+    let mut completed_count = 0;
+    let result = upload_local_directory_inner(
+        &app,
+        manager.clone(),
+        session_id,
+        local_path,
+        remote_path,
+        directory_controller.clone(),
+        &mut completed_count,
+    )
+    .await;
+
+    match result {
+        Ok(()) => {
+            directory_controller.update_item_progress(completed_count, total_files);
+            let _ = app.emit(
+                "transfer-event",
+                &directory_controller.build_event("completed", 0, None),
+            );
+            unregister_transfer(&directory_controller.id());
+            Ok(())
+        }
+        Err(e) => {
+            if matches!(e, AppError::Cancelled(_)) {
+                let _ = app.emit(
+                    "transfer-event",
+                    &directory_controller.build_event("cancelled", 0, None),
+                );
+                let _ = cleanup_cancelled_upload(&manager, session_id, remote_path).await;
+            } else {
+                let _ = app.emit(
+                    "transfer-event",
+                    &directory_controller.build_event("error", 0, Some(e.to_string())),
+                );
+            }
+            unregister_transfer(&directory_controller.id());
+            Err(e)
+        }
+    }
 }
 
 pub async fn get_file_properties(

@@ -8,6 +8,7 @@ import {
   MdDelete,
   MdDownload,
   MdError,
+  MdFolder,
   MdFolderOff,
   MdPause,
   MdPlayArrow,
@@ -45,6 +46,12 @@ function formatSize(bytes: number): string {
 function formatTime(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function getParentDirectory(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, "");
+  const lastSlash = Math.max(normalized.lastIndexOf("/"), normalized.lastIndexOf("\\"));
+  return lastSlash > 0 ? normalized.slice(0, lastSlash) : normalized;
 }
 
 function HeaderActionButton({
@@ -96,12 +103,24 @@ function TransferRow({
   onDelete: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const DirIcon = item.direction === "upload" ? MdUpload : MdDownload;
+  const DirIcon = item.kind === "directory" ? MdFolder : item.direction === "upload" ? MdUpload : MdDownload;
   const dirColor = item.direction === "upload" ? "#4ade80" : "#60a5fa";
   const progress =
-    item.totalSize > 0
-      ? Math.min(100, Math.round((item.bytesTransferred / item.totalSize) * 100))
-      : 0;
+    item.kind === "directory"
+      ? item.itemCountTotal && item.itemCountTotal > 0
+        ? Math.min(100, Math.round(((item.itemCountCompleted ?? 0) / item.itemCountTotal) * 100))
+        : item.status === "completed"
+          ? 100
+          : 0
+      : item.totalSize > 0
+        ? Math.min(100, Math.round((item.bytesTransferred / item.totalSize) * 100))
+        : 0;
+  const openTargetDirectory =
+    item.direction === "download"
+      ? item.kind === "directory"
+        ? item.localPath
+        : getParentDirectory(item.localPath)
+      : "";
   const canPause = item.status === "transferring";
   const canResume = item.status === "paused";
   const canRetry = item.status === "error" || item.status === "cancelled";
@@ -154,20 +173,31 @@ function TransferRow({
                 style={{ color: "var(--df-text-dimmed)" }}
               >
                 <span>{formatTime(item.timestamp)}</span>
-                {item.totalSize > 0 && (
+                {item.kind === "directory" ? (
+                  item.itemCountTotal !== undefined && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {t("fileTransfer.directoryProgress", {
+                          completed: item.itemCountCompleted ?? 0,
+                          total: item.itemCountTotal,
+                        })}
+                      </span>
+                    </>
+                  )
+                ) : item.totalSize > 0 ? (
                   <>
                     <span>·</span>
                     <span>
                       {formatSize(item.bytesTransferred)} / {formatSize(item.totalSize)}
                     </span>
                   </>
-                )}
-                {item.status === "completed" && item.size > 0 && item.totalSize === 0 && (
+                ) : item.status === "completed" && item.size > 0 && item.totalSize === 0 ? (
                   <>
                     <span>·</span>
                     <span>{formatSize(item.size)}</span>
                   </>
-                )}
+                ) : null}
                 {item.error && (
                   <>
                     <span>·</span>
@@ -191,21 +221,22 @@ function TransferRow({
             )}
           </div>
 
-          {(item.status === "transferring" || item.status === "paused") && item.totalSize > 0 && (
-            <div
-              className="mt-1 h-1 rounded-full overflow-hidden"
-              style={{ backgroundColor: "var(--df-border)" }}
-            >
+          {(item.status === "transferring" || item.status === "paused") &&
+            (item.kind === "directory" ? (item.itemCountTotal ?? 0) > 0 : item.totalSize > 0) && (
               <div
-                className="h-full rounded-full transition-all duration-200"
-                style={{
-                  width: `${progress}%`,
-                  backgroundColor: dirColor,
-                  opacity: item.status === "paused" ? 0.45 : 0.8,
-                }}
-              />
-            </div>
-          )}
+                className="mt-1 h-1 rounded-full overflow-hidden"
+                style={{ backgroundColor: "var(--df-border)" }}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-200"
+                  style={{
+                    width: `${progress}%`,
+                    backgroundColor: dirColor,
+                    opacity: item.status === "paused" ? 0.45 : 0.8,
+                  }}
+                />
+              </div>
+            )}
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[180px]">
@@ -225,6 +256,15 @@ function TransferRow({
           <MdCancel className="mr-2 text-[0.875rem]" />
           {t("fileTransfer.cancel")}
         </ContextMenuItem>
+        {item.direction === "download" && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => openPath(openTargetDirectory)} disabled={!openTargetDirectory}>
+              <MdFolder className="mr-2 text-[0.875rem]" />
+              {t("fileTransfer.openTargetDirectory")}
+            </ContextMenuItem>
+          </>
+        )}
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
@@ -261,14 +301,15 @@ export default function FileTransfer({ activeSessionId }: FileTransferProps) {
 
   const displayPath = appSettings.transfer.download_path || resolvedDownloadDir;
   const visibleTransfers = useMemo(() => {
+    const topLevelTransfers = transfers.filter((transfer) => !transfer.parentId);
     const filteredTransfers = activeSessionId
-      ? transfers.filter(
+      ? topLevelTransfers.filter(
           (transfer) =>
             transfer.sessionId === activeSessionId ||
             transfer.status === "transferring" ||
             transfer.status === "paused",
         )
-      : transfers;
+      : topLevelTransfers;
 
     return [...filteredTransfers].sort((a, b) => b.timestamp - a.timestamp);
   }, [activeSessionId, transfers]);
