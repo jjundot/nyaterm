@@ -259,7 +259,7 @@ export default function Header({
       {
         label: t("menu.documentation"),
         icon: "menu_book",
-        action: () => openUrl(`${packageJson.homepage}/docs`),
+        action: () => openUrl(`${packageJson.docspage}`),
       },
       {
         label: t("menu.checkForUpdates"),
