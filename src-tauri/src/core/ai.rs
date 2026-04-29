@@ -601,12 +601,15 @@ async fn run_chat_stream(
 
             let (text, reasoning_content, mut command_cards) =
                 parse_model_output(&stream_result.text, stream_result.reasoning_content);
-            tracing::debug!(
+            tracing::info!(
                 stream_id = %stream_id,
                 session_id = %session_id,
-                text_len = text.len(),
+                raw_text_len = stream_result.text.len(),
+                parsed_text_len = text.len(),
                 has_reasoning = reasoning_content.is_some(),
+                reasoning_len = reasoning_content.as_ref().map(|r| r.len()).unwrap_or(0),
                 command_card_count = command_cards.len(),
+                text_preview = %truncate_preview(&text, 200),
                 "Parsed AI chat stream output"
             );
             for card in &mut command_cards {
@@ -1647,10 +1650,12 @@ async fn run_model_stream(
         }
     }
 
-    tracing::debug!(
+    tracing::info!(
         stream_id = %stream_id,
         text_len = output.len(),
         reasoning_len = reasoning_output.len(),
+        text_preview = %truncate_preview(&output, 200),
+        reasoning_preview = %truncate_preview(&reasoning_output, 200),
         "AI model stream completed"
     );
 
@@ -2180,18 +2185,65 @@ fn parse_model_output(
             let reasoning_content = trim_optional_to_option(output.reasoning)
                 .or_else(|| trim_optional_to_option(stream_reasoning));
             let (text, extracted_reasoning) = extract_think_block(&text);
-            (
+            let result = (
                 text,
                 extracted_reasoning.or(reasoning_content),
                 output.command_cards,
-            )
+            );
+            if !result.0.is_empty() {
+                return result;
+            }
+            promote_reasoning_to_text(result)
         }
         Err(_) => {
             let normalized_reasoning = trim_optional_to_option(stream_reasoning);
             let (text, extracted_reasoning) = extract_think_block(raw_text);
-            (text, extracted_reasoning.or(normalized_reasoning), vec![])
+            let result = (text, extracted_reasoning.or(normalized_reasoning), vec![]);
+            if !result.0.is_empty() {
+                return result;
+            }
+            promote_reasoning_to_text(result)
         }
     }
+}
+
+/// When the primary text is empty but reasoning content exists, try to
+/// extract a usable answer from the reasoning. Thinking models (e.g. Qwen3)
+/// sometimes put the entire response in the reasoning channel.
+fn promote_reasoning_to_text(
+    (text, reasoning, cards): (String, Option<String>, Vec<AiCommandCard>),
+) -> (String, Option<String>, Vec<AiCommandCard>) {
+    if !text.is_empty() {
+        return (text, reasoning, cards);
+    }
+    let reasoning_str = match reasoning.as_deref() {
+        Some(r) if !r.trim().is_empty() => r,
+        _ => return (text, reasoning, cards),
+    };
+
+    tracing::info!(
+        reasoning_preview = %truncate_preview(reasoning_str, 300),
+        "Text content empty; attempting to extract answer from reasoning"
+    );
+
+    if let Some(json_str) = extract_json_object(reasoning_str) {
+        if let Ok(output) = serde_json::from_str::<AiModelOutput>(&json_str) {
+            let promoted_text = if output.text.trim().is_empty() {
+                json_str.clone()
+            } else {
+                output.text
+            };
+            let inner_reasoning = trim_optional_to_option(output.reasoning);
+            return (promoted_text, inner_reasoning, output.command_cards);
+        }
+    }
+
+    let (visible, inner_reasoning) = extract_think_block(reasoning_str);
+    if !visible.is_empty() {
+        return (visible, inner_reasoning, cards);
+    }
+
+    (reasoning.unwrap_or_default(), None, cards)
 }
 
 fn extract_json_object(raw_text: &str) -> Option<String> {
@@ -2231,6 +2283,15 @@ fn extract_think_block(raw_text: &str) -> (String, Option<String>) {
         visible_text.trim().to_string(),
         trim_string_to_option(reasoning_parts.join("\n\n")),
     )
+}
+
+fn truncate_preview(s: &str, max_len: usize) -> String {
+    let trimmed = s.trim();
+    if trimmed.len() <= max_len {
+        trimmed.to_string()
+    } else {
+        format!("{}…", &trimmed[..max_len])
+    }
 }
 
 fn trim_string_to_option(value: String) -> Option<String> {
