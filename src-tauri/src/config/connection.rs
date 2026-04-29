@@ -141,7 +141,7 @@ pub struct Group {
     pub sort_order: i32,
 }
 
-/// Root config for groups and saved connections (sessions.json).
+/// Root config for groups and saved connections.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionsConfig {
     #[serde(default)]
@@ -156,14 +156,11 @@ pub type AppConfig = SessionsConfig;
 // ── Loading / saving ────────────────────────────────────────────────────────
 
 pub fn load_sessions(app: &AppHandle) -> AppResult<SessionsConfig> {
-    let dir = get_config_dir(app)?;
-    let path = dir.join("sessions.json");
-
-    if !path.exists() {
+    let _ = get_config_dir(app)?;
+    let Some(content) = super::load_json_raw_doc(crate::storage::JSON_SESSIONS)? else {
         return Ok(SessionsConfig::default());
-    }
+    };
 
-    let content = std::fs::read_to_string(&path)?;
     let raw: serde_json::Value = serde_json::from_str(&content)?;
 
     let groups: Vec<Group> = raw

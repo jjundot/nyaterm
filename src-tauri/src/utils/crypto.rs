@@ -1,17 +1,17 @@
-//! AES-256-GCM encryption for SSH credentials stored in sessions.json.
+//! AES-256-GCM encryption for SSH credentials stored in redb JSON documents.
 //!
 //! ## Key hierarchy
 //!
 //! ```text
 //! wrapping_key  = SHA-256("dragonfly-key-wrap-v1:" || master_password_or_home_path)
-//! master.key    = base64( wrap_nonce[12] || AES-256-GCM(wrapping_key, master_key[32]) )
-//! sessions.json = { "password": base64( nonce[12] || AES-256-GCM(master_key, plaintext) ), … }
+//! master.key    = redb text doc containing base64( wrap_nonce[12] || AES-256-GCM(wrapping_key, master_key[32]) )
+//! sessions doc  = { "password": base64( nonce[12] || AES-256-GCM(master_key, plaintext) ), … }
 //! ```
 //!
 //! When a master password is configured the wrapping key is derived from it;
 //! otherwise the user's home directory path is used as the key material.
 //!
-//! The master password itself is stored in settings.json encrypted with the
+//! The master password itself is stored in the settings document encrypted with the
 //! home-path-derived key (via [`encrypt_settings_secret`]) to avoid a circular
 //! dependency during bootstrap.
 
@@ -21,7 +21,6 @@ use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
 use std::sync::RwLock;
 
 static MASTER_PASSWORD: RwLock<Option<String>> = RwLock::new(None);
@@ -36,12 +35,6 @@ pub fn set_master_password(password: Option<String>) {
 /// Returns the currently configured master password, if any.
 pub fn get_master_password() -> Option<String> {
     MASTER_PASSWORD.read().unwrap().clone()
-}
-
-fn key_file_path() -> AppResult<PathBuf> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| AppError::Crypto("cannot determine home directory".into()))?;
-    Ok(home.join(".dragonfly").join("master.key"))
 }
 
 /// Derives a wrapping key from the given material.
@@ -69,9 +62,8 @@ fn get_wrapping_key() -> AppResult<Key<Aes256Gcm>> {
     derive_wrapping_key(pw.as_deref())
 }
 
-/// Wraps `master_key` with `wrapping_key` and writes to `master.key`.
+/// Wraps `master_key` with `wrapping_key` and writes it to redb `master.key`.
 fn write_wrapped_master_key(
-    path: &std::path::Path,
     master_key: &Key<Aes256Gcm>,
     wrapping_key: &Key<Aes256Gcm>,
 ) -> AppResult<()> {
@@ -84,10 +76,7 @@ fn write_wrapped_master_key(
     let mut combined = nonce.to_vec();
     combined.extend_from_slice(&wrapped);
 
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, B64.encode(&combined))?;
+    crate::storage::save_text_doc(crate::storage::TEXT_MASTER_KEY, &B64.encode(&combined))?;
     Ok(())
 }
 
@@ -109,13 +98,9 @@ fn unwrap_master_key_bytes(raw: &[u8], wrapping_key: &Key<Aes256Gcm>) -> AppResu
     Ok(*Key::<Aes256Gcm>::from_slice(&master_key_bytes))
 }
 
-/// Loads the master key from `~/.dragonfly/master.key`, creating it on first use.
+/// Loads the master key from redb `master.key`, creating it on first use.
 fn get_master_key() -> AppResult<Key<Aes256Gcm>> {
-    let path = key_file_path()?;
-
-    if path.exists() {
-        let encoded = std::fs::read_to_string(&path)
-            .map_err(|e| AppError::Crypto(format!("read master.key: {e}")))?;
+    if let Some(encoded) = crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)? {
         let raw = B64
             .decode(encoded.trim())
             .map_err(|e| AppError::Crypto(format!("decode master.key: {e}")))?;
@@ -125,7 +110,7 @@ fn get_master_key() -> AppResult<Key<Aes256Gcm>> {
     } else {
         let master_key = Aes256Gcm::generate_key(OsRng);
         let wrapping_key = get_wrapping_key()?;
-        write_wrapped_master_key(&path, &master_key, &wrapping_key)?;
+        write_wrapped_master_key(&master_key, &wrapping_key)?;
         Ok(master_key)
     }
 }
@@ -135,11 +120,9 @@ fn get_master_key() -> AppResult<Key<Aes256Gcm>> {
 /// `old_password` is the previous master password (`None` = home-path-based).
 /// `new_password` is the new master password (`None` = revert to home-path-based).
 pub fn rewrap_master_key(old_password: Option<&str>, new_password: Option<&str>) -> AppResult<()> {
-    let path = key_file_path()?;
-
-    let master_key = if path.exists() {
-        let encoded = std::fs::read_to_string(&path)
-            .map_err(|e| AppError::Crypto(format!("read master.key: {e}")))?;
+    let master_key = if let Some(encoded) =
+        crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)?
+    {
         let raw = B64
             .decode(encoded.trim())
             .map_err(|e| AppError::Crypto(format!("decode master.key: {e}")))?;
@@ -151,12 +134,12 @@ pub fn rewrap_master_key(old_password: Option<&str>, new_password: Option<&str>)
     };
 
     let new_wrapping = derive_wrapping_key(new_password)?;
-    write_wrapped_master_key(&path, &master_key, &new_wrapping)?;
+    write_wrapped_master_key(&master_key, &new_wrapping)?;
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Settings-secret helpers (for the master password field in settings.json)
+// Settings-secret helpers (for the master password field in the settings document)
 // ---------------------------------------------------------------------------
 
 /// Encrypts a value using the home-path-derived key directly (not via master.key).

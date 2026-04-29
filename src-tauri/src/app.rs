@@ -34,6 +34,8 @@ pub fn setup(
         .path()
         .home_dir()
         .map_err(|e: tauri::Error| e.to_string())?;
+    let config_dir = home_dir.join(".dragonfly");
+    crate::storage::init(&config_dir)?;
 
     let settings_load = crate::config::load_app_settings(app.handle());
     let diagnostics = settings_load
@@ -67,10 +69,9 @@ pub fn setup(
         }
     }
 
-    let config_dir = home_dir.join(".dragonfly");
     let mgr = session_manager.clone();
     tauri::async_runtime::spawn(async move {
-        mgr.init_history_store(config_dir).await;
+        mgr.init_history_store().await;
     });
 
     if let Err(error) = quick_commands_store.load_from_disk(app.handle()) {

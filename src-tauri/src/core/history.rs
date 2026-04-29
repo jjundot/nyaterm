@@ -28,6 +28,11 @@ pub struct CommandHistoryStore {
     history_path: Option<PathBuf>,
 }
 
+pub(crate) enum PreparedHistorySave {
+    File(PathBuf, Vec<u8>),
+    Redb(String),
+}
+
 impl CommandHistoryStore {
     pub fn new() -> Self {
         Self {
@@ -37,6 +42,7 @@ impl CommandHistoryStore {
         }
     }
 
+    #[cfg(test)]
     pub fn set_history_path(&mut self, path: PathBuf) {
         self.history_path = Some(path);
     }
@@ -46,15 +52,19 @@ impl CommandHistoryStore {
     }
 
     pub fn load(&mut self) -> AppResult<()> {
-        let Some(path) = self.history_path.clone() else {
-            return Ok(());
+        let content = if let Some(path) = self.history_path.clone() {
+            if !path.exists() {
+                return Ok(());
+            }
+            fs::read_to_string(&path)?
+        } else {
+            let Some(content) = crate::storage::load_json_doc_raw(crate::storage::JSON_HISTORY)?
+            else {
+                return Ok(());
+            };
+            content
         };
 
-        if !path.exists() {
-            return Ok(());
-        }
-
-        let content = fs::read_to_string(&path)?;
         if content.trim().is_empty() {
             return Ok(());
         }
@@ -71,26 +81,30 @@ impl CommandHistoryStore {
     }
 
     pub fn save(&mut self) -> AppResult<()> {
-        if let Some((path, bytes)) = self.prepare_save() {
-            flush_to_disk(&path, &bytes)?;
+        if let Some(pending) = self.prepare_save() {
+            flush_prepared_save(pending)?;
         }
         Ok(())
     }
 
-    /// Serializes dirty state and marks clean. Returns `(path, bytes)` for
-    /// the caller to write to disk (possibly via `spawn_blocking`).
-    pub fn prepare_save(&mut self) -> Option<(PathBuf, Vec<u8>)> {
+    /// Serializes dirty state and marks clean. Returns a prepared write for
+    /// the caller to persist (possibly via `spawn_blocking`).
+    pub(crate) fn prepare_save(&mut self) -> Option<PreparedHistorySave> {
         if !self.dirty {
             return None;
         }
-        let path = self.history_path.clone()?;
         let payload = HistoryStoreFileV2 {
             version: HISTORY_STORE_VERSION,
             entries: self.entries.clone(),
         };
-        let bytes = serde_json::to_vec(&payload).ok()?;
         self.dirty = false;
-        Some((path, bytes))
+        if let Some(path) = self.history_path.clone() {
+            let bytes = serde_json::to_vec(&payload).ok()?;
+            Some(PreparedHistorySave::File(path, bytes))
+        } else {
+            let content = serde_json::to_string(&payload).ok()?;
+            Some(PreparedHistorySave::Redb(content))
+        }
     }
 
     pub fn add(&mut self, command: String) -> bool {
@@ -358,6 +372,15 @@ pub(crate) fn flush_to_disk(path: &Path, bytes: &[u8]) -> AppResult<()> {
         fs::create_dir_all(parent)?;
     }
     write_atomic(path, bytes)
+}
+
+pub(crate) fn flush_prepared_save(pending: PreparedHistorySave) -> AppResult<()> {
+    match pending {
+        PreparedHistorySave::File(path, bytes) => flush_to_disk(&path, &bytes),
+        PreparedHistorySave::Redb(content) => {
+            crate::storage::save_json_doc_raw(crate::storage::JSON_HISTORY, &content)
+        }
+    }
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> AppResult<()> {

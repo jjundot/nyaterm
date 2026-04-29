@@ -69,12 +69,10 @@ pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
     let dir = get_config_dir(app)?;
     let settings_path = dir.join("settings.json");
     let mut settings: AppSettings = load_json(&settings_path)?;
-    let has_embedded_cloud_sync = settings_path.exists()
-        && std::fs::read_to_string(&settings_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-            .and_then(|value| value.get("cloud_sync").cloned())
-            .is_some();
+    let has_embedded_cloud_sync = super::load_json_raw_doc(crate::storage::JSON_SETTINGS)?
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| value.get("cloud_sync").cloned())
+        .is_some();
 
     let mut migrated = false;
 

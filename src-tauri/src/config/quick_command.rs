@@ -37,7 +37,7 @@ pub struct QuickCommandCategory {
     pub name: String,
 }
 
-/// List of quick commands persisted in quick-command.json.
+/// List of quick commands persisted in local app storage.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QuickCommandsConfig {
     pub commands: Vec<QuickCommand>,
@@ -45,13 +45,13 @@ pub struct QuickCommandsConfig {
     pub categories: Vec<QuickCommandCategory>,
 }
 
-/// Loads quick commands from ~/.dragonfly/quick-command.json.
+/// Loads quick commands from local app storage.
 pub fn load_quick_commands(app: &AppHandle) -> AppResult<QuickCommandsConfig> {
     let dir = get_config_dir(app)?;
     load_json(&dir.join("quick-command.json"))
 }
 
-/// Saves quick commands to disk.
+/// Saves quick commands to local app storage.
 pub fn save_quick_commands(app: &AppHandle, config: &QuickCommandsConfig) -> AppResult<()> {
     let dir = get_config_dir(app)?;
     save_json(&dir.join("quick-command.json"), config)

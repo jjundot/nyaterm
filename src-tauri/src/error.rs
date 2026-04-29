@@ -32,6 +32,9 @@ pub enum AppError {
     Config(String),
 
     #[error("{0}")]
+    Storage(String),
+
+    #[error("{0}")]
     Channel(String),
 
     #[error("{0}")]

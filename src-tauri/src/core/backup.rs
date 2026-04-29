@@ -78,7 +78,7 @@ fn import_legacy_config(app: &AppHandle, file_path: &str) -> AppResult<()> {
         .map_err(|e| AppError::Crypto(format!("backup decryption failed: {e}")))?;
 
     let zip_bytes = rotate_right(&rotated);
-    let config_dir = config::get_config_dir(app)?;
+    let _ = config::get_config_dir(app)?;
 
     let cursor = Cursor::new(zip_bytes);
     let mut archive = zip::ZipArchive::new(cursor)
@@ -97,10 +97,20 @@ fn import_legacy_config(app: &AppHandle, file_path: &str) -> AppResult<()> {
             continue;
         };
 
-        let out_path = config_dir.join(&name);
+        let Some(file_name) = name.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
-        std::fs::write(&out_path, &buf)?;
+        if let Some(key) = crate::storage::json_key_for_legacy_file(file_name) {
+            let content = String::from_utf8(buf)
+                .map_err(|e| AppError::Config(format!("invalid UTF-8 in {file_name}: {e}")))?;
+            crate::storage::save_json_doc_raw(key, &content)?;
+        } else if let Some(key) = crate::storage::text_key_for_legacy_file(file_name) {
+            let content = String::from_utf8(buf)
+                .map_err(|e| AppError::Config(format!("invalid UTF-8 in {file_name}: {e}")))?;
+            crate::storage::save_text_doc(key, &content)?;
+        }
     }
 
     if let Ok(settings) = crate::config::load_app_settings(app) {

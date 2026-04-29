@@ -9,7 +9,6 @@ use crate::utils::fuzzy::{fuzzy_search_items, FuzzyResult};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -140,11 +139,10 @@ impl SessionManager {
         let _ = self.app_handle.set(app);
     }
 
-    /// Loads history from config_dir/history.json for fuzzy search.
-    pub async fn init_history_store(&self, config_dir: PathBuf) {
+    /// Loads command history from redb for fuzzy search.
+    pub async fn init_history_store(&self) {
         let needs_save = {
             let mut store = self.history_store.lock().await;
-            store.set_history_path(config_dir.join("history.json"));
             if let Err(e) = store.load() {
                 tracing::warn!("Failed to load command history: {}", e);
             }
@@ -157,11 +155,10 @@ impl SessionManager {
         }
     }
 
-    /// Reload command history from a specific on-disk path and notify listeners.
-    pub async fn reload_history_from_disk(&self, history_path: PathBuf) -> AppResult<()> {
+    /// Reload command history from redb and notify listeners.
+    pub async fn reload_history_from_storage(&self) -> AppResult<()> {
         {
             let mut store = self.history_store.lock().await;
-            store.set_history_path(history_path);
             store.load()?;
         }
         if let Some(app) = self.app_handle.get() {
@@ -390,11 +387,11 @@ impl SessionManager {
                 store.prepare_save()
             };
 
-            let Some((path, bytes)) = pending else {
+            let Some(pending) = pending else {
                 break;
             };
 
-            if let Err(err) = super::history::flush_to_disk(&path, &bytes) {
+            if let Err(err) = super::history::flush_prepared_save(pending) {
                 tracing::warn!("Failed to flush command history during shutdown: {}", err);
                 break;
             }
@@ -482,12 +479,12 @@ async fn save_history_snapshot(history_store: &Arc<Mutex<CommandHistoryStore>>) 
         store.prepare_save()
     };
 
-    let Some((path, bytes)) = pending else {
+    let Some(pending) = pending else {
         return;
     };
 
     let write_result =
-        tokio::task::spawn_blocking(move || super::history::flush_to_disk(&path, &bytes)).await;
+        tokio::task::spawn_blocking(move || super::history::flush_prepared_save(pending)).await;
     match write_result {
         Ok(Err(err)) => {
             tracing::warn!("Failed to save command history: {}", err);

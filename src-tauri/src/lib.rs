@@ -7,6 +7,7 @@ mod core;
 mod error;
 mod observability;
 mod platform;
+mod storage;
 mod tray;
 mod utils;
 

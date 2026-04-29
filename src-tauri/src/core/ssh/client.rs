@@ -112,33 +112,27 @@ impl SshHandler {
         Self { app, host, port }
     }
 
-    fn get_known_hosts_path(&self) -> Option<std::path::PathBuf> {
-        self.app
-            .path()
-            .home_dir()
+    fn load_known_hosts(&self) -> String {
+        crate::storage::load_text_doc(crate::storage::TEXT_KNOWN_HOSTS)
             .ok()
-            .map(|h: std::path::PathBuf| h.join(".dragonfly").join("known_hosts"))
+            .flatten()
+            .unwrap_or_default()
     }
 
-    fn append_known_host(&self, path: &std::path::Path, host_entry: &str) {
-        use std::io::Write;
-        if let Ok(mut file) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
+    fn append_known_host(&self, host_entry: &str) {
+        if let Err(error) =
+            crate::storage::append_text_line(crate::storage::TEXT_KNOWN_HOSTS, host_entry)
         {
-            if let Err(error) = writeln!(file, "{}", host_entry) {
-                tracing::warn!(
-                    host = %self.host,
-                    port = self.port,
-                    %error,
-                    "Failed to persist SSH host key to known_hosts"
-                );
-                let _ = self.app.emit(
-                    "ssh-error",
-                    format!("Failed to save known_hosts: {}", error),
-                );
-            }
+            tracing::warn!(
+                host = %self.host,
+                port = self.port,
+                %error,
+                "Failed to persist SSH host key to known_hosts"
+            );
+            let _ = self.app.emit(
+                "ssh-error",
+                format!("Failed to save known_hosts: {}", error),
+            );
         }
     }
 }
@@ -177,12 +171,9 @@ fn check_known_host_entry(
     }
 }
 
-fn replace_known_host_entry(
-    path: &std::path::Path,
-    host_identifier: &str,
-    new_entry: &str,
-) -> std::io::Result<()> {
-    let content = std::fs::read_to_string(path).unwrap_or_default();
+fn replace_known_host_entry(host_identifier: &str, new_entry: &str) -> AppResult<()> {
+    let content = crate::storage::load_text_doc(crate::storage::TEXT_KNOWN_HOSTS)?
+        .unwrap_or_default();
     let mut lines: Vec<&str> = content
         .lines()
         .filter(|line| {
@@ -191,7 +182,10 @@ fn replace_known_host_entry(
         })
         .collect();
     lines.push(new_entry);
-    std::fs::write(path, lines.join("\n") + "\n")
+    crate::storage::save_text_doc(
+        crate::storage::TEXT_KNOWN_HOSTS,
+        &(lines.join("\n") + "\n"),
+    )
 }
 
 fn preferred_algorithms() -> Preferred {
@@ -271,15 +265,6 @@ impl client::Handler for SshHandler {
         &mut self,
         server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
-        let path = match self.get_known_hosts_path() {
-            Some(p) => p,
-            None => return Ok(false),
-        };
-
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-
         let key_type = server_public_key.algorithm().to_string();
         let key_base64 = server_public_key.public_key_base64();
         let fingerprint = server_public_key.fingerprint(Default::default());
@@ -291,7 +276,7 @@ impl client::Handler for SshHandler {
         };
 
         let host_entry = format!("{} {} {}", host_identifier, key_type, key_base64);
-        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        let content = self.load_known_hosts();
 
         let policy = crate::config::load_app_settings(&self.app)
             .map(|s| s.security.host_key_policy)
@@ -351,9 +336,7 @@ impl client::Handler for SshHandler {
                         fingerprint = %fingerprint,
                         "SSH host key changed, auto-accepting and updating known_hosts"
                     );
-                    if let Err(error) =
-                        replace_known_host_entry(&path, &host_identifier, &host_entry)
-                    {
+                    if let Err(error) = replace_known_host_entry(&host_identifier, &host_entry) {
                         tracing::warn!(
                             host = %self.host, port = self.port, %error,
                             "Failed to update known_hosts"
@@ -365,7 +348,7 @@ impl client::Handler for SshHandler {
                         fingerprint = %fingerprint,
                         "Auto-accepting new SSH host key and appending to known_hosts"
                     );
-                    self.append_known_host(&path, &host_entry);
+                    self.append_known_host(&host_entry);
                 }
                 Ok(true)
             }
@@ -425,8 +408,7 @@ impl client::Handler for SshHandler {
                         "User accepted SSH host key"
                     );
                     if is_key_changed {
-                        if let Err(error) =
-                            replace_known_host_entry(&path, &host_identifier, &host_entry)
+                        if let Err(error) = replace_known_host_entry(&host_identifier, &host_entry)
                         {
                             tracing::warn!(
                                 host = %self.host, port = self.port, %error,
@@ -434,7 +416,7 @@ impl client::Handler for SshHandler {
                             );
                         }
                     } else {
-                        self.append_known_host(&path, &host_entry);
+                        self.append_known_host(&host_entry);
                     }
                     Ok(true)
                 } else {

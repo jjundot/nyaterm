@@ -1,6 +1,7 @@
 //! Config persistence for sessions, UI, and quick commands.
 //!
-//! Stores JSON files in `~/.dragonfly/`. Credentials are AES-256-GCM encrypted in-place.
+//! Stores JSON documents in `~/.dragonfly/dragonfly.redb`.
+//! Credentials are AES-256-GCM encrypted in-place.
 
 mod cloud_sync;
 mod connection;
@@ -58,7 +59,7 @@ pub use ui::{ActivityBarLayout, RestorablePaneNode, RestorableTab, UiConfig};
 use crate::error::{AppError, AppResult};
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 pub(crate) fn get_config_dir(app: &AppHandle) -> AppResult<PathBuf> {
@@ -71,18 +72,30 @@ pub(crate) fn get_config_dir(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(config_dir)
 }
 
-pub(crate) fn load_json<T: serde::de::DeserializeOwned + Default>(path: &PathBuf) -> AppResult<T> {
-    if !path.exists() {
-        return Ok(T::default());
-    }
-    let content = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&content)?)
+pub(crate) fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> AppResult<T> {
+    crate::storage::load_json_doc(json_doc_key_from_path(path)?)
 }
 
-pub(crate) fn save_json<T: Serialize>(path: &PathBuf, data: &T) -> AppResult<()> {
-    let content = serde_json::to_string_pretty(data)?;
-    fs::write(path, content)?;
-    Ok(())
+pub(crate) fn save_json<T: Serialize>(path: &Path, data: &T) -> AppResult<()> {
+    crate::storage::save_json_doc(json_doc_key_from_path(path)?, data)
+}
+
+pub(crate) fn load_json_raw_doc(key: &str) -> AppResult<Option<String>> {
+    crate::storage::load_json_doc_raw(key)
+}
+
+fn json_doc_key_from_path(path: &Path) -> AppResult<&'static str> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| AppError::Config(format!("invalid config path '{}'", path.display())))?;
+
+    crate::storage::json_key_for_legacy_file(file_name).ok_or_else(|| {
+        AppError::Config(format!(
+            "unsupported redb JSON document for config path '{}'",
+            path.display()
+        ))
+    })
 }
 
 pub(crate) fn uuid_v4() -> String {

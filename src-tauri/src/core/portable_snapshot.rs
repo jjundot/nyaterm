@@ -6,7 +6,6 @@ use crate::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -132,52 +131,52 @@ pub fn build_portable_snapshot(
 ) -> AppResult<PortableSnapshotEnvelope> {
     let _ = config::load_config(app)?;
     let settings = config::load_app_settings(app)?;
-    let config_dir = config::get_config_dir(app)?;
+    let _ = config::get_config_dir(app)?;
 
     let mut files = BTreeMap::new();
     files.insert(
         "sessions.json".to_string(),
-        read_or_default(
-            &config_dir.join("sessions.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_SESSIONS,
             &serde_json::to_string_pretty(&config::SessionsConfig::default())?,
         )?,
     );
     files.insert(
         "keys.json".to_string(),
-        read_or_default(
-            &config_dir.join("keys.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_KEYS,
             &serde_json::to_string_pretty(&config::KeysConfig::default())?,
         )?,
     );
     files.insert(
         "passwords.json".to_string(),
-        read_or_default(
-            &config_dir.join("passwords.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_PASSWORDS,
             &serde_json::to_string_pretty(&config::PasswordsConfig::default())?,
         )?,
     );
     files.insert(
         "otp.json".to_string(),
-        read_or_default(
-            &config_dir.join("otp.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_OTP,
             &serde_json::to_string_pretty(&config::OtpConfig::default())?,
         )?,
     );
     files.insert(
         "proxies.json".to_string(),
-        read_or_default(&config_dir.join("proxies.json"), "{\n  \"proxies\": []\n}")?,
+        read_json_doc_or_default(crate::storage::JSON_PROXIES, "{\n  \"proxies\": []\n}")?,
     );
     files.insert(
         "tunnels.json".to_string(),
-        read_or_default(
-            &config_dir.join("tunnels.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_TUNNELS,
             &serde_json::to_string_pretty(&config::TunnelsConfig::default())?,
         )?,
     );
     files.insert(
         "quick-command.json".to_string(),
-        read_or_default(
-            &config_dir.join("quick-command.json"),
+        read_json_doc_or_default(
+            crate::storage::JSON_QUICK_COMMAND,
             &serde_json::to_string_pretty(&config::QuickCommandsConfig::default())?,
         )?,
     );
@@ -189,14 +188,14 @@ pub fn build_portable_snapshot(
     if snapshot_kind == PortableSnapshotKind::Backup {
         files.insert(
             "history.json".to_string(),
-            read_or_default(
-                &config_dir.join("history.json"),
+            read_json_doc_or_default(
+                crate::storage::JSON_HISTORY,
                 "{\n  \"version\": 2,\n  \"entries\": []\n}",
             )?,
         );
     }
 
-    if let Some(master_key) = read_optional_string(&master_key_path()?)? {
+    if let Some(master_key) = crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)? {
         files.insert("master.key".to_string(), master_key);
     }
 
@@ -232,18 +231,15 @@ pub async fn apply_portable_snapshot(
 ) -> AppResult<()> {
     validate_portable_snapshot(envelope)?;
 
-    let config_dir = config::get_config_dir(app)?;
-    std::fs::create_dir_all(&config_dir)?;
+    let _ = config::get_config_dir(app)?;
 
     for (name, contents) in &envelope.payload.files {
         match name.as_str() {
             "portable-settings.json" | "master.key" => continue,
             _ => {
-                let path = config_dir.join(name);
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
+                if let Some(key) = crate::storage::json_key_for_legacy_file(name) {
+                    crate::storage::save_json_doc_raw(key, contents)?;
                 }
-                std::fs::write(path, contents)?;
             }
         }
     }
@@ -255,11 +251,7 @@ pub async fn apply_portable_snapshot(
     }
 
     if let Some(master_key) = envelope.payload.files.get("master.key") {
-        let path = master_key_path()?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, master_key)?;
+        crate::storage::save_text_doc(crate::storage::TEXT_MASTER_KEY, master_key)?;
     }
 
     let quick_commands_store = app.state::<Arc<QuickCommandsStore>>();
@@ -269,7 +261,7 @@ pub async fn apply_portable_snapshot(
     session_manager
         .inner()
         .as_ref()
-        .reload_history_from_disk(config_dir.join("history.json"))
+        .reload_history_from_storage()
         .await?;
 
     let _ = app.emit("connections-changed", ());
@@ -297,24 +289,8 @@ fn validate_portable_snapshot(envelope: &PortableSnapshotEnvelope) -> AppResult<
     Ok(())
 }
 
-fn read_or_default(path: &Path, default_contents: &str) -> AppResult<String> {
-    if path.exists() {
-        return std::fs::read_to_string(path).map_err(Into::into);
-    }
-    Ok(default_contents.to_string())
-}
-
-fn read_optional_string(path: &Path) -> AppResult<Option<String>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    std::fs::read_to_string(path).map(Some).map_err(Into::into)
-}
-
-fn master_key_path() -> AppResult<PathBuf> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| AppError::Crypto("cannot determine home directory".to_string()))?;
-    Ok(home.join(".dragonfly").join("master.key"))
+fn read_json_doc_or_default(key: &str, default_contents: &str) -> AppResult<String> {
+    Ok(crate::storage::load_json_doc_raw(key)?.unwrap_or_else(|| default_contents.to_string()))
 }
 
 fn current_time_ms() -> u64 {
