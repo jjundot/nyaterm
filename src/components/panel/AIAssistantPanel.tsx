@@ -670,6 +670,7 @@ function ModelCombobox({
   open,
   onOpenChange,
   onSelect,
+  className,
 }: {
   models: AIModelConfigItem[];
   credentials: AIProviderCredential[];
@@ -677,6 +678,7 @@ function ModelCombobox({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (model: AIModelConfigItem) => void;
+  className?: string;
 }) {
   const { t } = useTranslation();
 
@@ -687,7 +689,7 @@ function ModelCombobox({
           type="button"
           size="sm"
           variant="outline"
-          className="h-8 min-w-0 max-w-[12rem] justify-between gap-2 px-2 text-xs"
+          className={`h-8 min-w-0 max-w-[12rem] justify-between gap-2 px-2 text-xs ${className}`}
           disabled={models.length === 0}
         >
           <span className="truncate">{selectedModel?.name ?? t("ai.modelSelect")}</span>
@@ -1853,48 +1855,58 @@ function AIAssistantPanel({ activePane, activeConnection, intent }: AIAssistantP
                 }
               }}
             />
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <Select
-                  value={mode}
-                  onValueChange={(default_mode) =>
-                    updateAppSettings({
-                      ai: { ...aiSettings, default_mode: default_mode as AIMode },
-                    })
-                  }
-                >
-                  <SelectTrigger size="sm" className="w-[6.5rem] text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ask">{t("ai.modeAsk")}</SelectItem>
-                    <SelectItem value="agent">{t("ai.modeAgent")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <ModelCombobox
-                  models={enabledModels}
-                  credentials={aiSettings.provider_credentials}
-                  selectedModel={selectedModel}
-                  open={modelPopoverOpen}
-                  onOpenChange={setModelPopoverOpen}
-                  onSelect={(model) =>
-                    updateAppSettings({ ai: { ...aiSettings, default_model_id: model.id } })
-                  }
-                />
+            <div className="flex w-full items-center justify-between gap-2">
+              <div className="flex flex-1 min-w-0 items-center gap-2">
+                
+                <div className="w-1/3 min-w-0">
+                  <Select
+                    value={mode}
+                    onValueChange={(default_mode) =>
+                      updateAppSettings({
+                        ai: { ...aiSettings, default_mode: default_mode as AIMode },
+                      })
+                    }
+                  >
+                    <SelectTrigger size="sm" className="w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="ask">{t("ai.modeAsk")}</SelectItem>
+                      <SelectItem value="agent">{t("ai.modeAgent")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-2/3 min-w-0">
+                  <ModelCombobox
+                    models={enabledModels}
+                    credentials={aiSettings.provider_credentials}
+                    selectedModel={selectedModel}
+                    open={modelPopoverOpen}
+                    onOpenChange={setModelPopoverOpen}
+                    onSelect={(model) =>
+                      updateAppSettings({ ai: { ...aiSettings, default_model_id: model.id } })
+                    }
+                    className="w-full truncate"
+                  />
+                </div>
               </div>
-              {loading ? (
-                <Button size="icon-sm" variant="outline" onClick={cancelStream}>
-                  <MdStop />
-                </Button>
-              ) : (
-                <Button
-                  size="icon-sm"
-                  onClick={submit}
-                  disabled={!input.trim() || !selectedModel || !aiSettings.enabled}
-                >
-                  <MdSend />
-                </Button>
-              )}
+
+              <div className="flex-shrink-0">
+                {loading ? (
+                  <Button size="icon-sm" variant="outline" onClick={cancelStream}>
+                    <MdStop />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon-sm"
+                    onClick={submit}
+                    disabled={!input.trim() || !selectedModel || !aiSettings.enabled}
+                  >
+                    <MdSend />
+                  </Button>
+                )}
+              </div>
             </div>
             {!selectedModel ? (
               <div className="text-[0.6875rem] text-amber-600">{t("ai.noEnabledModels")}</div>
