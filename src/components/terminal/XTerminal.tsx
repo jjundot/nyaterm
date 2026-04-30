@@ -187,6 +187,8 @@ export default function XTerminal({
   const [skippedOutputChars, setSkippedOutputChars] = useState(0);
   const [riskPrompt, setRiskPrompt] = useState<RiskPromptState | null>(null);
   const [riskConfirmValue, setRiskConfirmValue] = useState("");
+  const [aiCapturing, setAiCapturing] = useState(false);
+  const aiCapturingRef = useRef(false);
 
   const { terminalTheme } = useTheme();
   const { t } = useTranslation();
@@ -747,6 +749,7 @@ export default function XTerminal({
     let outputUnlisten: UnlistenFn | null = null;
     let closedUnlisten: UnlistenFn | null = null;
     let focusUnlisten: UnlistenFn | null = null;
+    let captureUnlisten: UnlistenFn | null = null;
 
     const refreshGutter = () => {
       if (!isTerminalAlive()) return;
@@ -1010,6 +1013,17 @@ export default function XTerminal({
       }
       focusUnlisten = nextFocusUnlisten;
 
+      const nextCaptureUnlisten = await listen<string>(`ai-capture-${sessionId}`, (event) => {
+        const capturing = event.payload === "start";
+        aiCapturingRef.current = capturing;
+        setAiCapturing(capturing);
+      });
+      if (disposed) {
+        nextCaptureUnlisten();
+        return;
+      }
+      captureUnlisten = nextCaptureUnlisten;
+
       try {
         await invoke("attach_session", { sessionId });
       } catch {
@@ -1021,6 +1035,8 @@ export default function XTerminal({
     const removePreviewListener = listenSessionInputPreview(sessionId, handleInputPreview);
 
     const dataDisposable = terminal.onData((data) => {
+      if (aiCapturingRef.current) return;
+
       if (disconnectedRef.current) {
         if (data === "\r" && connectionIdRef.current && !reconnectingRef.current) {
           reconnectingRef.current = true;
@@ -1223,6 +1239,7 @@ export default function XTerminal({
       if (outputUnlisten) outputUnlisten();
       if (closedUnlisten) closedUnlisten();
       if (focusUnlisten) focusUnlisten();
+      if (captureUnlisten) captureUnlisten();
       if (pendingOutputFlushRef.current !== null) {
         cancelAnimationFrame(pendingOutputFlushRef.current);
         pendingOutputFlushRef.current = null;
@@ -1395,6 +1412,25 @@ export default function XTerminal({
         )}
 
         {syncOverlay && <SyncActionOverlay overlay={syncOverlay} />}
+
+        {aiCapturing && (
+          <div className="absolute inset-x-3 top-3 z-20 flex justify-end pointer-events-none">
+            <div
+              className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs shadow-lg"
+              style={{
+                borderColor: "var(--df-primary)",
+                backgroundColor: "color-mix(in srgb, var(--df-bg-panel) 95%, var(--df-primary))",
+                color: "var(--df-text)",
+              }}
+            >
+              <span
+                className="inline-block h-2 w-2 rounded-full animate-pulse"
+                style={{ backgroundColor: "var(--df-primary)" }}
+              />
+              <span>{t("terminal.aiExecuting")}</span>
+            </div>
+          </div>
+        )}
 
         <TerminalSearchBar
           show={showSearchBar}
