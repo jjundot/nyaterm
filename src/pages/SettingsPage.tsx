@@ -109,8 +109,8 @@ export default function SettingsPage() {
       {
         id: "terminal_session",
         label: t("settings.groupTerminalSession"),
-        icon: "dns",
-        items: ["terminal", "search", "translation"],
+        icon: "terminal",
+        items: ["terminal-general", "search", "translation"],
       },
       {
         id: "ai_group",
@@ -208,7 +208,7 @@ export default function SettingsPage() {
     },
     { id: "security", label: t("settings.security"), icon: "security", Component: SecurityTab },
     { id: "syncBackup", label: t("settings.syncBackup"), icon: "backup" },
-    { id: "terminal", label: t("settings.terminal"), icon: "terminal", Component: TerminalTab },
+    { id: "terminal-general", label: t("settings.general"), icon: "settings", Component: TerminalTab },
     {
       id: "interaction",
       label: t("settings.interaction"),
