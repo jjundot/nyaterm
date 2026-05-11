@@ -1,162 +1,313 @@
-<div align="center">
-    <img src="./public/nyaterm.svg" alt="NyaTerm Logo" width="100" height="100">
-    <h3>NyaTerm is a modern remote terminal workspace built with Tauri and Rust</h3>
-</div>
+<p align="center">
+  <img src="./public/nyaterm.svg" alt="NyaTerm" width="128" height="128">
+</p>
 
-## Overview
+<h1 align="center">NyaTerm</h1>
 
-NyaTerm is a desktop client for SSH-centric operations and mixed terminal workflows. It combines a React + Tauri interface with a Rust backend so you can manage remote hosts, local shells, file transfers, authentication, network tooling, AI-assisted terminal actions, session import / export, diagnostics, and protected configuration sync / backup workflows from one workspace.
+<p align="center">
+  <strong>A modern remote terminal workspace built with Tauri, React, and Rust.</strong><br/>
+  <a href="https://nyaterm.app"><strong>nyaterm.app</strong></a> ·
+  <a href="https://nyaterm.app/docs/"><strong>Documentation</strong></a>
+</p>
 
-## Highlights
+<p align="center">
+  SSH, local shells, Telnet, Serial, SFTP, tunnels, OTP, AI assistance, and encrypted sync in one desktop client.
+</p>
 
-### Sessions and workspace
+<p align="center">
+  <a href="https://nyaterm.app"><img alt="Version" src="https://img.shields.io/badge/Version-1.0.1-blue?style=for-the-badge"></a>
+  &nbsp;
+  <a href="#"><img alt="Platform" src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=for-the-badge"></a>
+  &nbsp;
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge"></a>
+  &nbsp;
+  <a href="https://tauri.app"><img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24c8db?style=for-the-badge&logo=tauri"></a>
+</p>
+
+<p align="center">
+  <a href="https://nyaterm.app">
+    <img src="https://img.shields.io/badge/Download-Latest-success?style=for-the-badge" alt="Download Latest">
+  </a>
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> · <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
+---
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/product-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/product-light.png">
+    <img alt="NyaTerm main workspace" src="./docs-site/static/img/home/product-light.png">
+  </picture>
+</p>
+
+---
+
+<a name="ai-assistant"></a>
+# AI Assistant
+
+NyaTerm includes an AI Assistant panel for command generation, terminal output explanation, error analysis, and multi-step terminal workflows.
+
+## What It Can Do
+
+- **Ask mode** for one-off help such as generating commands, explaining selected output, and analyzing errors
+- **Agent mode** for multi-step work using an observe-decide-run loop against the active terminal session
+- **Structured command cards** with risk levels, execution controls, and optional save-to-quick-command support
+- **Session mentions** with `@` to bring other terminal sessions into the AI context
+- **Provider management** for built-in providers and custom OpenAI-compatible endpoints
+- **Risk control** for high-impact commands, including approval gates and safer alternatives
+
+---
+
+# Contents
+
+- [AI Assistant](#ai-assistant)
+  - [What It Can Do](#what-it-can-do)
+- [Contents](#contents)
+- [What is NyaTerm](#what-is-nyaterm)
+- [Why NyaTerm](#why-nyaterm)
+- [Features](#features)
+  - [Sessions and Workspace](#sessions-and-workspace)
+  - [Terminal Experience](#terminal-experience)
+  - [SFTP and File Workflows](#sftp-and-file-workflows)
+  - [Security, Authentication, and Networking](#security-authentication-and-networking)
+  - [Sync, Backup, and Migration](#sync-backup-and-migration)
+- [Screenshots](#screenshots)
+  - [Workspace](#workspace)
+  - [Terminal Enhancements](#terminal-enhancements)
+  - [Remote Files](#remote-files)
+  - [Security and Network Tools](#security-and-network-tools)
+  - [Sync and Backup](#sync-and-backup)
+- [Supported Platforms](#supported-platforms)
+- [Supported Session Types](#supported-session-types)
+- [Getting Started](#getting-started)
+  - [Download](#download)
+  - [Prerequisites for Development](#prerequisites-for-development)
+  - [Development](#development)
+  - [Project Structure](#project-structure)
+- [License](#license)
+
+---
+
+<a name="what-is-nyaterm"></a>
+# What is NyaTerm
+
+**NyaTerm** is a desktop client for SSH-centric operations and mixed terminal workflows. It combines a React + Tauri interface with a Rust backend so you can manage remote hosts, local shells, file transfers, authentication, network tooling, AI-assisted terminal actions, session import/export, diagnostics, and encrypted sync/backup from one workspace.
+
+- **NyaTerm is** an SSH client for developers, sysadmins, and DevOps engineers
+- **NyaTerm is** a terminal workspace with tabs, horizontal splits, and vertical splits
+- **NyaTerm is** an SFTP browser with a transfer queue and local-edit-then-upload-back workflow
+- **NyaTerm supports** SSH, Local Terminal, Telnet, and Serial sessions
+- **NyaTerm is not** a shell replacement; it connects to remote shells, local shells, Telnet endpoints, and serial devices
+
+---
+
+<a name="why-nyaterm"></a>
+# Why NyaTerm
+
+NyaTerm is built for people who move between servers, local commands, devices, and configuration files all day.
+
+- **Workspace-first** — keep related terminals together with tabs, split panes, side panels, and child windows
+- **Remote operations in context** — browse SFTP files, follow terminal paths, run transfers, and edit remote files without leaving the session
+- **Security-aware workflows** — manage credentials, keys, known hosts, OTP, lock screen, and master-password protected storage
+- **Portable configuration** — import from existing tools, export encrypted `.dgfy` backups, and sync encrypted snapshots through WebDAV or S3-compatible storage
+- **AI where it is useful** — generate commands, inspect output, and run approved multi-step actions from the active terminal context
+
+---
+
+<a name="features"></a>
+# Features
+
+## Sessions and Workspace
 
 - SSH, Local Terminal, Telnet, and Serial session support
 - Multi-tab workspace with horizontal and vertical pane splits
-- Saved connections with folders, icons, duplication, reconnect, import, and encrypted config restore
-- Left / right activity bars for file explorer, network, security, sync & backup, AI assistant, command history, and resource monitoring
-- Child windows for settings, new-session, quick-command, and auto-upload flows
-- Tray support with optional minimize-to-tray behavior on window close
+- Saved connections with folders, icons, metadata, duplication, reconnect, and import flows
+- Left and right activity bars for file explorer, network, Security/Auth, Sync & Backup, AI Assistant, saved connections, active sessions, command history, and resource monitoring
+- Child windows for settings, new-session creation, quick-command editing, and auto-upload prompts
+- Tray support with optional minimize-to-tray behavior
 
-### Terminal experience
+## Terminal Experience
 
-- Search bar, command history, fuzzy suggestions, online search, translation, and context actions
-- Configurable command suggestion history length thresholds for noisy or long commands
-- Optional line numbers and timestamps gutter for dense terminal output
+- Terminal search, copy/paste, context menus, and selected-text actions
+- Command history with fuzzy suggestions and configurable length filters for noisy commands
+- Optional line-number and timestamp gutter
 - Optional action links for IPv4 addresses, `host:port`, and archive filenames
 - Optional keyword highlighting with built-in presets and custom rules
-- Large-output protection under load, configurable scrollback, and SSH keep-alive
-- Session recording with configurable save path and remote resource monitor for active SSH sessions
+- Large-output protection, configurable scrollback, SSH keep-alive, and session recording
+- Online search and translation from selected terminal text
 
-### Remote operations
+## SFTP and File Workflows
 
-- Built-in SFTP file explorer with upload, download, rename, move, delete, symlink, create-file, and properties actions
-- Folder upload, multi-select actions, editable path bar, and manual / automatic sync with terminal cwd
-- Open remote files in a local editor and upload changes back through the watcher-driven auto-upload flow
-- Windows support for dragging local files or folders directly into the file explorer to upload
-- Quick Commands with categories, colors, icons, execution modes, pinning, and variable prompts
+- Built-in SFTP file explorer for SSH sessions
+- Upload, download, rename, move, delete, properties, new file/folder, and symlink actions
+- Folder upload, multi-select, editable path bar, and manual/automatic sync with terminal cwd
+- Transfer queue with pause, resume, cancel, retry, timestamp preservation, and configurable concurrency
+- Open remote files in a local editor and upload saved changes back through the watcher-driven auto-upload flow
+- External drag-and-drop upload support on Windows
 
-### AI assistance
+## Security, Authentication, and Networking
 
-- Side-panel AI assistant for command generation, terminal output explanation, error analysis, and selected-text workflows
-- Model / provider management for built-in providers and custom OpenAI-compatible endpoints
-- Structured command cards with risk levels, approval gates, and optional save-to-quick-command support
-- Reasoning-aware response rendering when providers expose a reasoning channel
-
-### Security and networking
-
-- Password auth, private keys, host-key verification, and local encrypted credential storage
+- Password authentication, private keys, host-key verification, and encrypted local persistence
+- Credential management with regex-based terminal auto-fill
 - OTP management with TOTP/HOTP, QR import, and SSH auto-fill support
-- Screen lock, master password support, and redb-backed known-hosts / secret persistence
-- Proxy configs, SSH jump hosts, and local / remote / dynamic tunnels
-- Diagnostics settings, local log management, and diagnostics bundle export for troubleshooting
+- Proxy configurations, SSH jump hosts, and local / remote / dynamic tunnels
+- Screen lock, master password, diagnostics settings, local log management, and diagnostics bundle export
 
-### Sync, backup, and portability
+## Sync, Backup, and Migration
 
-- Encrypted cloud sync and backup for portable NyaTerm data through WebDAV and S3-compatible storage
-- Master password required before enabling sync, running manual actions, importing / exporting encrypted config backups, or creating scheduled encrypted backups
-- Startup sync checks, debounced auto-push after supported local changes, and scheduled backup retention policies
+- Encrypted cloud sync and backup through WebDAV and S3-compatible storage
+- Master password required before sync, backup, encrypted import/export, or scheduled encrypted backup actions
+- Startup sync checks, debounced auto-push after supported local changes, and scheduled backup retention
 - Manual test / push / pull / backup actions, remote backup restore, and snapshot-level conflict resolution
-- Session import from Xshell, MobaXterm, and WindTerm, plus full-app encrypted `.dgfy` import / export
+- Session import from Xshell, MobaXterm, and WindTerm
+- Full-app encrypted `.dgfy` import/export for portable NyaTerm configuration
 
-## Supported session types
+---
+
+<a name="screenshots"></a>
+# Screenshots
+
+## Workspace
+
+Manage SSH, local shell, Telnet, and Serial sessions inside one tabbed and split-pane workspace.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/overview-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/overview-light.png">
+    <img alt="NyaTerm workspace overview" src="./docs-site/static/img/home/overview-light.png">
+  </picture>
+</p>
+
+## Terminal Enhancements
+
+Use command history, search, translation, action links, timestamps, keyword highlighting, and large-output protection in the terminal.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/terminal-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/terminal-light.png">
+    <img alt="NyaTerm terminal features" src="./docs-site/static/img/home/terminal-light.png">
+  </picture>
+</p>
+
+## Remote Files
+
+Browse SFTP files beside the terminal, manage transfers, and send local editor changes back to the remote path.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/files-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/files-light.png">
+    <img alt="NyaTerm SFTP file workflow" src="./docs-site/static/img/home/files-light.png">
+  </picture>
+</p>
+
+## Security and Network Tools
+
+Manage credentials, OTP, known hosts, proxies, jump hosts, and SSH tunnels from dedicated panels.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/security-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/security-light.png">
+    <img alt="NyaTerm security and network tools" src="./docs-site/static/img/home/security-light.png">
+  </picture>
+</p>
+
+## Sync and Backup
+
+Sync encrypted portable configuration snapshots and restore backups through WebDAV or S3-compatible storage.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs-site/static/img/home/sync-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs-site/static/img/home/sync-light.png">
+    <img alt="NyaTerm sync and backup" src="./docs-site/static/img/home/sync-light.png">
+  </picture>
+</p>
+
+---
+
+<a name="supported-platforms"></a>
+# Supported Platforms
+
+| OS | Support |
+| :--- | :--- |
+| **Windows** | Windows 10/11, x64 / arm64 |
+| **macOS** | macOS 12+, Intel / Apple Silicon |
+| **Linux** | Ubuntu 20.04+, Fedora 36+, Arch Linux, and similar distributions |
+
+Download installers from [nyaterm.app](https://nyaterm.app) or the [Releases](https://github.com/nyakang/nyaterm/releases) page.
+
+---
+
+<a name="supported-session-types"></a>
+# Supported Session Types
 
 | Type | Typical use | Notes |
 |------|-------------|-------|
-| SSH | Linux / Unix remote servers | Supports SFTP, OTP, resource monitor, proxy, jump host, tunnels |
+| SSH | Linux / Unix remote servers | Supports SFTP, OTP, resource monitor, proxy, jump host, and tunnels |
 | Local Terminal | Local shell workflows | Uses your local shell path and working directory |
-| Telnet | Legacy network devices / lab systems | Lightweight terminal session without SSH-only features |
-| Serial | Routers, boards, embedded devices | Configurable port, baud rate, parity, stop bits |
+| Telnet | Legacy network devices or lab systems | Lightweight terminal session without SSH-only features |
+| Serial | Routers, boards, embedded devices | Configurable port, baud rate, data bits, parity, and stop bits |
 
-## Documentation map
+---
 
-The detailed user docs live in `docs-site/`.
+<a name="getting-started"></a>
+# Getting Started
 
-- Product overview: [docs-site/docs/intro.md](docs-site/docs/intro.md)
-- Installation: [docs-site/docs/getting-started/installation.md](docs-site/docs/getting-started/installation.md)
-- Quick start: [docs-site/docs/getting-started/quick-start.md](docs-site/docs/getting-started/quick-start.md)
-- Session guide: [docs-site/docs/guide/session-types.md](docs-site/docs/guide/session-types.md)
-- Terminal guide: [docs-site/docs/guide/terminal.md](docs-site/docs/guide/terminal.md)
-- File transfer guide: [docs-site/docs/guide/file-transfer.md](docs-site/docs/guide/file-transfer.md)
-- Sync and backup guide: [docs-site/docs/guide/sync-and-backup.md](docs-site/docs/guide/sync-and-backup.md)
-- Development docs: [docs-site/docs/development/](docs-site/docs/development)
+## Download
 
-The docs site ships with Simplified Chinese by default and English under `/en/`.
+Download the latest build for your platform from [nyaterm.app](https://nyaterm.app) or [Releases](https://github.com/nyakang/nyaterm/releases).
 
-## Screenshot placeholders
+| Platform | Format |
+|----------|--------|
+| Windows | `.msi` / `.exe` |
+| macOS | `.dmg` |
+| Linux | `.deb` / `.AppImage` |
 
-If you want to add screenshots later, these are the recommended stable asset paths to use in the docs site:
-
-- `docs-site/static/img/docs/readme/main-workspace.png` — main workspace with split panes and both side panels
-- `docs-site/static/img/docs/readme/session-types.png` — new-session window showing SSH / Local / Telnet / Serial tabs
-- `docs-site/static/img/docs/readme/terminal-features.png` — gutter, action links, and highlight demo output
-- `docs-site/static/img/docs/readme/network-and-security.png` — proxy / tunnel / OTP related UI
-- `docs-site/static/img/docs/readme/ai-assistant.png` — AI assistant panel with command cards or explanation flow
-
-## Tech stack
-
-| Layer | Technology |
-|------|------------|
-| Frontend | React 19, TypeScript, Vite, TailwindCSS 4 |
-| Desktop runtime | Tauri 2 |
-| Backend | Rust |
-| Terminal | xterm.js |
-| SSH | russh |
-| File transfer | russh-sftp |
-| Local persistence | redb |
-| Storage abstraction | OpenDAL |
-
-## Getting started
-
-### Prerequisites
+## Prerequisites for Development
 
 - Node.js 18+
 - Rust stable via [rustup](https://rustup.rs/)
-- pnpm recommended
+- pnpm
 
-### Installation
+## Development
 
 ```bash
-git clone https://git.coderkang.top/Tauri/nyaterm.git
+git clone https://github.com/nyakang/nyaterm.git
 cd nyaterm
 pnpm install
-```
-
-### Run the app in development
-
-```bash
 pnpm tauri dev
 ```
 
-### Run the docs site locally
+## Project Structure
 
-```bash
-pnpm --dir docs-site start
+```text
+├── src/                    # React frontend
+│   ├── components/         # UI, terminal, panels, dialogs, settings
+│   ├── hooks/              # Frontend state and workflow hooks
+│   ├── lib/                # Terminal, AI, sync, theme, platform helpers
+│   ├── pages/              # Child-window pages
+│   └── i18n/               # Application translations
+├── src-tauri/              # Tauri 2 + Rust backend
+│   ├── src/cmd/            # Tauri commands exposed to the frontend
+│   ├── src/core/           # SSH, SFTP, PTY, Telnet, Serial, AI, backup logic
+│   ├── src/config/         # Persistent config models
+│   └── crates/otp/         # Local OTP implementation
+├── docs-site/              # Docusaurus documentation site
+├── public/                 # Static assets
+└── scripts/                # Checks, version sync, and demo helper scripts
 ```
 
-This builds and serves all locales, so both `/` and `/en/` are available.
+---
 
-For locale-specific hot reload during editing:
+<a name="license"></a>
+# License
 
-```bash
-pnpm --dir docs-site start:zh
-pnpm --dir docs-site start:en
-```
-
-### Build
-
-```bash
-pnpm build
-pnpm tauri build
-pnpm --dir docs-site build
-```
-
-The desktop bundles are generated under `src-tauri/target/release/bundle`.
-
-## Contributing
-
-Please read the docs under [docs-site/docs/development/](docs-site/docs/development) before contributing.
-
-## License
-
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE).
