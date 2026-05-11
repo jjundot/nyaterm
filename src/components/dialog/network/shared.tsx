@@ -12,7 +12,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { SelectGroup, SelectLabel } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Group, SavedConnection } from "@/types/global";
@@ -218,76 +217,71 @@ export function ConnectionCombobox({
       >
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <ScrollArea
-            className="h-72 overscroll-contain"
-            onWheelCapture={(event) => event.stopPropagation()}
-          >
-            <CommandList className="max-h-none">
-              <CommandEmpty>{emptyText}</CommandEmpty>
-              {clearLabel ? (
-                <CommandGroup className="p-0">
+          <CommandList className="max-h-72">
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            {clearLabel ? (
+              <CommandGroup className="p-0">
+                <CommandItem
+                  value={clearLabel}
+                  className="items-start gap-3 px-3 py-2"
+                  onSelect={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm">{clearLabel}</div>
+                  </div>
+                  {!value ? <MdCheck className="mt-0.5 text-sm text-primary" /> : null}
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+            {groupedOptions.map((group) => (
+              <CommandGroup
+                key={group.id}
+                value={group.id}
+                heading={
+                  <SelectGroup>
+                    <SelectLabel className="truncate px-3 py-2 text-[0.6875rem] uppercase tracking-[0.08em]">
+                      {group.label}
+                    </SelectLabel>
+                  </SelectGroup>
+                }
+                className="p-0 [&_[cmdk-group-heading]]:p-0"
+              >
+                {group.options.map((option) => (
                   <CommandItem
-                    value={clearLabel}
+                    key={option.connection.id}
+                    value={`${option.connection.name} ${option.searchText}`}
                     className="items-start gap-3 px-3 py-2"
+                    disabled={!!option.disabled && option.connection.id !== value}
                     onSelect={() => {
-                      onChange("");
+                      if (option.disabled && option.connection.id !== value) {
+                        return;
+                      }
+                      onChange(option.connection.id);
                       setOpen(false);
                     }}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm">{clearLabel}</div>
-                    </div>
-                    {!value ? <MdCheck className="mt-0.5 text-sm text-primary" /> : null}
-                  </CommandItem>
-                </CommandGroup>
-              ) : null}
-              {groupedOptions.map((group) => (
-                <CommandGroup
-                  key={group.id}
-                  value={group.id}
-                  heading={
-                    <SelectGroup>
-                      <SelectLabel className="truncate px-3 py-2 text-[0.6875rem] uppercase tracking-[0.08em]">
-                        {group.label}
-                      </SelectLabel>
-                    </SelectGroup>
-                  }
-                  className="p-0 [&_[cmdk-group-heading]]:p-0"
-                >
-                  {group.options.map((option) => (
-                    <CommandItem
-                      key={option.connection.id}
-                      value={`${option.connection.name} ${option.searchText}`}
-                      className="items-start gap-3 px-3 py-2"
-                      disabled={!!option.disabled && option.connection.id !== value}
-                      onSelect={() => {
-                        if (option.disabled && option.connection.id !== value) {
-                          return;
-                        }
-                        onChange(option.connection.id);
-                        setOpen(false);
-                      }}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm">{option.connection.name}</div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {option.subtitle}
-                        </div>
+                      <div className="truncate text-sm">{option.connection.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {option.subtitle}
                       </div>
-                      {option.disabled && option.connection.id !== value ? (
-                        <span className="pt-0.5 text-[0.625rem] text-muted-foreground">
-                          {option.disabledReason ?? t("network.alreadyConfigured")}
-                        </span>
-                      ) : null}
-                      {option.connection.id === value ? (
-                        <MdCheck className="mt-0.5 text-sm text-primary" />
-                      ) : null}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-            </CommandList>
-          </ScrollArea>
+                    </div>
+                    {option.disabled && option.connection.id !== value ? (
+                      <span className="pt-0.5 text-[0.625rem] text-muted-foreground">
+                        {option.disabledReason ?? t("network.alreadyConfigured")}
+                      </span>
+                    ) : null}
+                    {option.connection.id === value ? (
+                      <MdCheck className="mt-0.5 text-sm text-primary" />
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+          </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
