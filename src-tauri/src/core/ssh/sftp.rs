@@ -10,8 +10,8 @@ use crate::observability::{log_event, StructuredLog, StructuredLogLevel};
 use russh_sftp::client::SftpSession;
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use serde::Serialize;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
 use tokio::sync::Notify;
@@ -19,10 +19,13 @@ use tokio::sync::Notify;
 const SFTP_FILE_TYPE_MASK: u32 = 0o170000;
 const POSIX_MODE_MASK: u32 = 0o7777;
 const TRANSFER_CANCELLED_MESSAGE: &str = "Transfer cancelled";
+const RECENT_TRANSFER_TARGET_LIMIT: usize = 200;
 
 lazy_static::lazy_static! {
     static ref ACTIVE_TRANSFERS: Arc<Mutex<HashMap<String, Arc<TransferController>>>> =
         Arc::new(Mutex::new(HashMap::new()));
+    static ref RECENT_TRANSFER_TARGETS: Arc<Mutex<VecDeque<(String, TransferTargetSnapshot)>>> =
+        Arc::new(Mutex::new(VecDeque::new()));
 }
 
 /// Event payload emitted to the frontend to track file transfer lifecycle.
@@ -60,6 +63,9 @@ pub struct FileEntry {
     pub is_symlink: bool,
     pub size: u64,
     pub permissions: String,
+    pub owner: String,
+    pub group: String,
+    pub mtime: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -106,6 +112,13 @@ struct TransferRuntime {
     item_count_total: Option<u64>,
     item_count_completed: Option<u64>,
     control_state: TransferControlState,
+}
+
+#[derive(Debug, Clone)]
+struct TransferTargetSnapshot {
+    local_path: String,
+    direction: String,
+    kind: String,
 }
 
 #[derive(Debug)]
@@ -222,6 +235,15 @@ impl TransferController {
     fn control_state(&self) -> TransferControlState {
         self.runtime.lock().unwrap().control_state
     }
+
+    fn target_snapshot(&self) -> TransferTargetSnapshot {
+        let runtime = self.runtime.lock().unwrap();
+        TransferTargetSnapshot {
+            local_path: runtime.local_path.clone(),
+            direction: runtime.direction.clone(),
+            kind: runtime.kind.clone(),
+        }
+    }
 }
 
 fn register_transfer(controller: Arc<TransferController>) {
@@ -232,11 +254,89 @@ fn register_transfer(controller: Arc<TransferController>) {
 }
 
 fn unregister_transfer(id: &str) {
-    ACTIVE_TRANSFERS.lock().unwrap().remove(id);
+    let removed = ACTIVE_TRANSFERS.lock().unwrap().remove(id);
+    if let Some(controller) = removed {
+        remember_transfer_target(id.to_string(), controller.target_snapshot());
+    }
 }
 
 fn find_transfer(id: &str) -> Option<Arc<TransferController>> {
     ACTIVE_TRANSFERS.lock().unwrap().get(id).cloned()
+}
+
+fn remember_transfer_target(id: String, snapshot: TransferTargetSnapshot) {
+    let mut recent = RECENT_TRANSFER_TARGETS.lock().unwrap();
+    if let Some(index) = recent
+        .iter()
+        .position(|(existing_id, _)| existing_id == &id)
+    {
+        recent.remove(index);
+    }
+
+    recent.push_front((id, snapshot));
+    while recent.len() > RECENT_TRANSFER_TARGET_LIMIT {
+        recent.pop_back();
+    }
+}
+
+fn find_transfer_target(id: &str) -> Option<TransferTargetSnapshot> {
+    if let Some(controller) = find_transfer(id) {
+        return Some(controller.target_snapshot());
+    }
+
+    RECENT_TRANSFER_TARGETS
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|(recent_id, snapshot)| {
+            if recent_id == id {
+                Some(snapshot.clone())
+            } else {
+                None
+            }
+        })
+}
+
+pub(crate) fn transfer_target_directory(transfer_id: &str) -> AppResult<PathBuf> {
+    let snapshot = find_transfer_target(transfer_id)
+        .ok_or_else(|| AppError::Config("Transfer target is no longer available".to_string()))?;
+
+    if snapshot.direction != "download" {
+        return Err(AppError::Config(
+            "Only download target directories can be opened".to_string(),
+        ));
+    }
+
+    let local_path_text = snapshot.local_path.trim();
+    if local_path_text.is_empty() {
+        return Err(AppError::Config(
+            "Transfer target path is empty".to_string(),
+        ));
+    }
+
+    let local_path = PathBuf::from(local_path_text);
+    let target_dir = if snapshot.kind == "directory" {
+        local_path
+    } else {
+        local_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    };
+
+    if !target_dir.exists() {
+        return Err(AppError::Config(
+            "Transfer target directory does not exist".to_string(),
+        ));
+    }
+    if !target_dir.is_dir() {
+        return Err(AppError::Config(
+            "Transfer target path is not a directory".to_string(),
+        ));
+    }
+
+    Ok(target_dir)
 }
 
 pub(crate) fn active_transfer_count() -> usize {
@@ -508,6 +608,26 @@ fn describe_permissions(mode: Option<u32>) -> String {
     }
 }
 
+fn owner_or_id(owner: &Option<String>, uid: Option<u32>) -> String {
+    owner
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| uid.map(|value| value.to_string()))
+        .unwrap_or_default()
+}
+
+fn group_or_id(group: &Option<String>, gid: Option<u32>) -> String {
+    group
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| gid.map(|value| value.to_string()))
+        .unwrap_or_default()
+}
+
 /// Resolves `$HOME` on the remote host via SFTP `canonicalize(".")`.
 pub async fn get_home_dir(manager: Arc<SessionManager>, session_id: &str) -> AppResult<String> {
     let sftp = open_sftp(&manager, session_id).await?;
@@ -557,6 +677,7 @@ pub async fn list_remote_dir(
         let size = attrs.size.unwrap_or(0);
         let perms = attrs.permissions.unwrap_or(0);
         let permissions = permissions_to_string(perms, type_char);
+        let mtime = u64::from(attrs.mtime.unwrap_or(0));
 
         entries.push(FileEntry {
             name,
@@ -564,6 +685,9 @@ pub async fn list_remote_dir(
             is_symlink,
             size,
             permissions,
+            owner: owner_or_id(&attrs.user, attrs.uid),
+            group: group_or_id(&attrs.group, attrs.gid),
+            mtime,
         });
     }
 
@@ -701,6 +825,14 @@ pub async fn download_remote_file(
             None => {
                 let file_name = remote_path.split('/').last().unwrap_or(remote_path);
                 let transfer_id = uuid::Uuid::new_v4().to_string();
+                remember_transfer_target(
+                    transfer_id.clone(),
+                    TransferTargetSnapshot {
+                        local_path: local_path.to_string(),
+                        direction: "download".to_string(),
+                        kind: "file".to_string(),
+                    },
+                );
                 let _ = app.emit(
                     "transfer-event",
                     &TransferEvent {
@@ -1856,8 +1988,8 @@ pub async fn get_file_properties(
         is_symlink,
         size: attrs.size.unwrap_or(0),
         permissions,
-        owner: attrs.user.unwrap_or_default(),
-        group: attrs.group.unwrap_or_default(),
+        owner: owner_or_id(&attrs.user, attrs.uid),
+        group: group_or_id(&attrs.group, attrs.gid),
         uid: attrs.uid.map_or_else(String::new, |v| v.to_string()),
         gid: attrs.gid.map_or_else(String::new, |v| v.to_string()),
         mtime: u64::from(attrs.mtime.unwrap_or(0)),

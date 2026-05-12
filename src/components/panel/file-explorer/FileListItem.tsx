@@ -37,6 +37,8 @@ interface FileListItemProps {
   isSelected: boolean;
   isParentDirectoryEntry?: boolean;
   activeSessionId: string | null;
+  columnTemplate: string;
+  rowWidth: number;
   onSelectionStart: (entry: FileEntry, event: React.MouseEvent) => void;
   onSelectionDrag: (entry: FileEntry, event: React.MouseEvent) => void;
   onContextMenuSelect: (entry: FileEntry, event: React.MouseEvent) => void;
@@ -56,11 +58,20 @@ interface FileListItemProps {
   onAIAction: (entry: FileEntry, action: AICustomActionConfig) => void;
 }
 
+function formatModifiedTime(unix: number): string {
+  if (!unix) return "-";
+  const d = new Date(unix * 1000);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function FileListItem({
   entry,
   isSelected,
   isParentDirectoryEntry = false,
   activeSessionId,
+  columnTemplate,
+  rowWidth,
   onSelectionStart,
   onSelectionDrag,
   onContextMenuSelect,
@@ -81,16 +92,23 @@ export function FileListItem({
 }: FileListItemProps) {
   const { t } = useTranslation();
   const entryIcon = getFileIcon(entry);
+  const modifiedTime = formatModifiedTime(entry.mtime);
+  const fileSize = isParentDirectoryEntry || entry.is_dir ? "-" : formatSize(entry.size);
+  const permissions = isParentDirectoryEntry ? "" : entry.permissions || "-";
+  const owner = isParentDirectoryEntry ? "" : entry.owner || "-";
+  const group = isParentDirectoryEntry ? "" : entry.group || "-";
   const itemTitle = isParentDirectoryEntry
     ? t("fileExplorer.goUp")
-    : `${entry.permissions} ${formatSize(entry.size)}`;
+    : `${permissions} ${fileSize} ${modifiedTime} ${owner}:${group}`;
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <li
-          className="flex h-[30px] items-center gap-2 rounded px-2 py-1 transition-colors cursor-pointer select-none"
+          className="grid h-[30px] items-center rounded transition-colors cursor-pointer select-none"
           style={{
+            gridTemplateColumns: columnTemplate,
+            width: rowWidth,
             backgroundColor: isSelected
               ? "color-mix(in srgb, var(--df-primary) 10%, transparent)"
               : undefined,
@@ -114,16 +132,43 @@ export function FileListItem({
           onContextMenu={(e) => onContextMenuSelect(entry, e)}
           title={itemTitle}
         >
-          <entryIcon.icon
-            className="text-base"
-            style={{ color: isSelected ? "var(--df-primary)" : entryIcon.color }}
-          />
-          <span className="flex-1 truncate text-xs">{entry.name}</span>
-          {!entry.is_dir && (
-            <span className="text-[0.625rem]" style={{ color: "var(--df-text-dimmed)" }}>
-              {formatSize(entry.size)}
-            </span>
-          )}
+          <div className="flex min-w-0 items-center gap-2 px-2">
+            <entryIcon.icon
+              className="shrink-0 text-base"
+              style={{ color: isSelected ? "var(--df-primary)" : entryIcon.color }}
+            />
+            <span className="min-w-0 flex-1 truncate text-xs">{entry.name}</span>
+          </div>
+          <span
+            className="truncate px-2 font-mono text-[0.625rem] tabular-nums"
+            style={{ color: "var(--df-text-dimmed)" }}
+          >
+            {isParentDirectoryEntry ? "" : modifiedTime}
+          </span>
+          <span
+            className="truncate px-2 text-right text-[0.625rem] tabular-nums"
+            style={{ color: "var(--df-text-dimmed)" }}
+          >
+            {isParentDirectoryEntry ? "" : fileSize}
+          </span>
+          <span
+            className="truncate px-2 font-mono text-[0.625rem]"
+            style={{ color: "var(--df-text-dimmed)" }}
+          >
+            {permissions}
+          </span>
+          <span
+            className="truncate px-2 text-[0.625rem]"
+            style={{ color: "var(--df-text-dimmed)" }}
+          >
+            {owner}
+          </span>
+          <span
+            className="truncate px-2 text-[0.625rem]"
+            style={{ color: "var(--df-text-dimmed)" }}
+          >
+            {group}
+          </span>
         </li>
       </ContextMenuTrigger>
       <ContextMenuContent className="min-w-[200px]">
