@@ -112,6 +112,62 @@ function replaceValue(value: string): TerminalInputState {
   };
 }
 
+function normalizeLineContent(value: string): string {
+  return value.replace(/\r?\n/gu, "").trimEnd();
+}
+
+function addCandidate(candidates: Set<string>, value: string): void {
+  const normalized = normalizeLineContent(value);
+  if (normalized.trim()) {
+    candidates.add(normalized);
+  }
+}
+
+function addSuffixCandidate(candidates: Set<string>, source: string, prefix: string): void {
+  const normalizedSource = normalizeLineContent(source);
+  const normalizedPrefix = normalizeLineContent(prefix);
+  if (!normalizedSource || !normalizedPrefix) {
+    return;
+  }
+
+  const index = normalizedSource.lastIndexOf(normalizedPrefix);
+  if (index >= 0) {
+    addCandidate(candidates, normalizedSource.slice(index));
+  }
+}
+
+function chooseTerminalLineCommand(previousValue: string, lineContent: string): string | null {
+  const previousCommand = sanitizeTerminalCommand(previousValue);
+  const sanitizedLine = sanitizeTerminalCommand(lineContent);
+  const candidates = new Set<string>();
+
+  addCandidate(candidates, sanitizedLine);
+  addCandidate(candidates, lineContent);
+  addSuffixCandidate(candidates, lineContent, previousValue);
+  addSuffixCandidate(candidates, lineContent, previousCommand);
+  addSuffixCandidate(candidates, sanitizedLine, previousValue);
+  addSuffixCandidate(candidates, sanitizedLine, previousCommand);
+
+  let best: { value: string; score: number } | null = null;
+  for (const candidate of candidates) {
+    const command = sanitizeTerminalCommand(candidate);
+    if (!command) {
+      continue;
+    }
+
+    const score = previousCommand && command.startsWith(previousCommand) ? command.length : 0;
+    if (previousCommand && score === 0) {
+      continue;
+    }
+
+    if (!best || score > best.score) {
+      best = { value: command, score };
+    }
+  }
+
+  return best?.value ?? null;
+}
+
 export function applyTerminalInputData(
   state: TerminalInputState,
   data: string,
@@ -171,9 +227,6 @@ export function applyTerminalInputData(
   }
 
   if (state.desynced && state.desyncReason === "tab") {
-    // Tab completion can change the visible prompt text without a reliable echo we can parse.
-    // Once the user resumes typing plain text, treat the tracker as synchronized again so
-    // suggestions recover for the current line instead of staying disabled until Enter/Ctrl+C.
     return insertText(
       {
         ...state,
@@ -221,6 +274,30 @@ export function getTrackedSubmissionCommand(state: TerminalInputState): string {
   }
 
   return sanitizeTerminalCommand(state.value);
+}
+
+/**
+ * Replace the tracker value with command text read from the terminal buffer.
+ * Used after a tab-desync recovery: the terminal line contains the real input
+ * including shell-completed text, while the tracker only has stale keystrokes.
+ */
+export function resyncFromTerminalLine(
+  current: TerminalInputState,
+  lineContent: string,
+): TerminalInputState | null {
+  const value = chooseTerminalLineCommand(current.value, lineContent);
+  if (!value) {
+    return null;
+  }
+
+  return {
+    value,
+    cursor: value.length,
+    desynced: false,
+    desyncReason: null,
+    lineRewriteRequired: false,
+    multiline: false,
+  };
 }
 
 export function canSuggestFromTracker(state: TerminalInputState): boolean {

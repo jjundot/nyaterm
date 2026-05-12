@@ -35,6 +35,7 @@ import {
   canSuggestFromTracker,
   createTerminalInputState,
   getTrackedSubmissionCommand,
+  resyncFromTerminalLine,
 } from "@/lib/terminalInputTracker";
 import { XTERM_PERFORMANCE_CONFIG } from "@/lib/xtermPerformance";
 import type { AIContext, CommandRiskResponse } from "@/types/global";
@@ -97,6 +98,16 @@ async function assessCommandRiskForTerminal(
   } catch {
     return assessCommandRisk(command, username);
   }
+}
+
+/** Read the current cursor line from the terminal buffer up to the cursor. */
+function readCurrentInputLine(terminal: Terminal): string {
+  const buffer = terminal.buffer.active;
+  const y = buffer.baseY + buffer.cursorY;
+  const line = buffer.getLine(y);
+  if (!line) return "";
+  const fullLine = line.translateToString(true, 0, buffer.cursorX);
+  return fullLine;
 }
 
 function readRecentOutput(terminal: Terminal, lineLimit: number) {
@@ -1166,6 +1177,20 @@ export default function XTerminal({
       }
 
       if (riskCheckPendingRef.current) return;
+
+      if (
+        data !== "\t" &&
+        inputStateRef.current.desynced &&
+        inputStateRef.current.desyncReason === "tab"
+      ) {
+        const recovered = resyncFromTerminalLine(
+          inputStateRef.current,
+          readCurrentInputLine(terminal),
+        );
+        if (recovered) {
+          inputStateRef.current = recovered;
+        }
+      }
 
       const command = data === "\r" ? getTrackedSubmissionCommand(inputStateRef.current) : "";
       if (data === "\r" && command && terminalAppSettingsRef.current?.ai?.risk_check_enabled) {

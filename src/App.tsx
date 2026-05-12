@@ -33,8 +33,10 @@ import { purgeSessionFromGroups } from "./lib/syncInputGroups";
 import {
   findTerminalWindowLeafById,
   findTerminalWindowLeafByTabId,
+  flattenTerminalWindows,
   insertTabAfterInLeaf,
   insertTabIntoLeaf,
+  moveTabBetweenLeaves,
   reconcileTerminalWindows,
   reorderTabsInLeaf,
   setLeafActiveTab,
@@ -543,6 +545,31 @@ function App() {
       current ? reorderTabsInLeaf(current, fromTabId, toIndex) : current,
     );
   }, []);
+
+  const handleMoveTabToLeaf = useCallback(
+    (fromTabId: string, targetLeafId: string, toIndex: number) => {
+      setTerminalWindows((current) => {
+        if (!current) return current;
+        const next = moveTabBetweenLeaves(current, fromTabId, targetLeafId, toIndex);
+        return next ?? current;
+      });
+      setActiveTabId(fromTabId);
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
+      });
+    },
+    [],
+  );
+
+  const handleUnsplit = useCallback(() => {
+    setTerminalWindows((current) => {
+      if (!current) return current;
+      return flattenTerminalWindows(current, activeTabId);
+    });
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
+    });
+  }, [activeTabId]);
 
   const handleUpdateWindowSplitRatio = useCallback((splitId: string, ratio: number) => {
     setTerminalWindows((current) =>
@@ -1538,12 +1565,14 @@ function App() {
           onDuplicateSession: handleDuplicateSession,
           onReconnectSession: handleReconnectSession,
           onSplitSession: handleSplitSession,
+          onUnsplit: handleUnsplit,
           onCloseSession: handleCloseSession,
           onCloseAll: handleCloseAllTabs,
           onCloseInactive: handleCloseInactiveTabs,
           onCloseRight: handleCloseRightTabs,
           onSessionInfo: handleSessionInfo,
           onReorderTabs: handleReorderTabsInLeaf,
+          onMoveTabToLeaf: handleMoveTabToLeaf,
           onActivatePane: handleActivatePane,
           onUpdatePaneSplitRatio: handleUpdatePaneSplitRatio,
           onUpdateWindowSplitRatio: handleUpdateWindowSplitRatio,
