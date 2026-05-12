@@ -17,7 +17,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  MdArrowDropDown,
+  MdArrowDropUp,
   MdArrowUpward,
+  MdClose,
   MdContentCopy,
   MdCreateNewFolder,
   MdDelete,
@@ -28,6 +31,7 @@ import {
   MdLink,
   MdNoteAdd,
   MdRefresh,
+  MdSearch,
   MdSend,
   MdSync,
   MdSyncLock,
@@ -76,7 +80,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { invoke } from "@/lib/invoke";
 import { logger } from "@/lib/logger";
 import { sendSessionInput } from "@/lib/sessionInput";
-import { formatSize } from "@/lib/utils";
+import { cn, formatSize } from "@/lib/utils";
 import { openAutoUpload } from "@/lib/windowManager";
 import type {
   AICustomActionConfig,
@@ -256,23 +260,116 @@ type FileExplorerSessionCache = {
 
 type LoadDirectoryOptions = {
   history?: "push" | "preserve";
+  selectEntryName?: string;
 };
 
 // Keep per-session explorer state alive when the panel is unmounted and shown again.
 const fileExplorerSessionCacheStore = new Map<string, FileExplorerSessionCache>();
 const FILE_LIST_ITEM_HEIGHT = 30;
+const FILE_LIST_HEADER_HEIGHT = 28;
 const FILE_LIST_OVERSCAN = 8;
 const PARENT_DIRECTORY_ENTRY_NAME = "..";
+type FileSortColumn = "name" | "mtime" | "size" | "permissions" | "owner" | "group";
+type FileSortDirection = "asc" | "desc";
+type FileSortMode = {
+  column: FileSortColumn;
+  direction: FileSortDirection;
+};
+type FileListColumn = {
+  id: FileSortColumn;
+  labelKey: string;
+  align?: "left" | "right";
+};
+type FileListColumnWidths = Record<FileSortColumn, number>;
+
+const FILE_LIST_COLUMNS: FileListColumn[] = [
+  { id: "name", labelKey: "fileExplorer.name" },
+  { id: "mtime", labelKey: "fileExplorer.mtime" },
+  { id: "size", labelKey: "fileExplorer.size", align: "right" },
+  { id: "permissions", labelKey: "fileExplorer.permissions" },
+  { id: "owner", labelKey: "fileExplorer.owner" },
+  { id: "group", labelKey: "fileExplorer.group" },
+];
+const DEFAULT_FILE_LIST_COLUMN_WIDTHS: FileListColumnWidths = {
+  name: 220,
+  mtime: 128,
+  size: 80,
+  permissions: 112,
+  owner: 96,
+  group: 96,
+};
+const MIN_FILE_LIST_COLUMN_WIDTHS: FileListColumnWidths = {
+  name: 140,
+  mtime: 112,
+  size: 72,
+  permissions: 92,
+  owner: 76,
+  group: 76,
+};
+const DEFAULT_FILE_SORT_DIRECTIONS: Record<FileSortColumn, FileSortDirection> = {
+  name: "asc",
+  mtime: "desc",
+  size: "desc",
+  permissions: "asc",
+  owner: "asc",
+  group: "asc",
+};
+
 const PARENT_DIRECTORY_ENTRY: FileEntry = {
   name: PARENT_DIRECTORY_ENTRY_NAME,
   is_dir: true,
   is_symlink: false,
   size: 0,
   permissions: "",
+  owner: "",
+  group: "",
+  mtime: 0,
 };
 
 function isParentDirectoryEntry(entry: FileEntry) {
   return entry.name === PARENT_DIRECTORY_ENTRY_NAME;
+}
+
+function naturalCompare(left: string, right: string) {
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareFileEntries(left: FileEntry, right: FileEntry, sortMode: FileSortMode) {
+  if (left.is_dir !== right.is_dir) return left.is_dir ? -1 : 1;
+
+  let result = 0;
+  switch (sortMode.column) {
+    case "mtime":
+      result = left.mtime - right.mtime;
+      break;
+    case "size":
+      result = left.size - right.size;
+      break;
+    case "permissions":
+      result = naturalCompare(left.permissions || "", right.permissions || "");
+      break;
+    case "owner":
+      result = naturalCompare(left.owner || "", right.owner || "");
+      break;
+    case "group":
+      result = naturalCompare(left.group || "", right.group || "");
+      break;
+    case "name":
+      result = naturalCompare(left.name, right.name);
+      break;
+  }
+
+  if (result !== 0) {
+    return sortMode.direction === "asc" ? result : -result;
+  }
+
+  return naturalCompare(left.name, right.name);
+}
+
+function matchesFileSearch(entry: FileEntry, query: string) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (!normalizedQuery) return true;
+  return entry.name.toLocaleLowerCase().includes(normalizedQuery);
 }
 
 function buildSessionCacheSnapshot(
@@ -316,6 +413,15 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const [currentPath, setCurrentPath] = useState("");
   const [homeDir, setHomeDir] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [fileSearchQuery, setFileSearchQuery] = useState("");
+  const [isFileSearchExpanded, setIsFileSearchExpanded] = useState(false);
+  const [fileSortMode, setFileSortMode] = useState<FileSortMode>({
+    column: "name",
+    direction: "asc",
+  });
+  const [fileListColumnWidths, setFileListColumnWidths] = useState<FileListColumnWidths>(
+    DEFAULT_FILE_LIST_COLUMN_WIDTHS,
+  );
   const lastSelectedRef = useRef<string | null>(null);
   const [isEditingPath, setIsEditingPath] = useState(false);
   const [pathInputText, setPathInputText] = useState("");
@@ -340,7 +446,9 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   const currentPathRef = useRef("");
   const homeDirRef = useRef("");
   const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const fileSearchInputRef = useRef<HTMLInputElement | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingRevealNameRef = useRef<string | null>(null);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const dragSelectionRef = useRef<{
@@ -364,6 +472,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     setIsExternalDropActive(false);
   }, []);
   const listScrollResetKey = `${activeSessionId ?? ""}:${currentPath}`;
+  const listFilterResetKey = `${fileSearchQuery}:${fileSortMode.column}:${fileSortMode.direction}`;
 
   useEffect(() => {
     const container = listContainerRef.current;
@@ -421,6 +530,32 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     }
     setListScrollTop(0);
   }, [listScrollResetKey]);
+
+  useEffect(() => {
+    if (!listFilterResetKey && !listContainerRef.current) {
+      setListScrollTop(0);
+      return;
+    }
+
+    const container = listContainerRef.current;
+    if (container) {
+      container.scrollTop = 0;
+    }
+    setListScrollTop(0);
+  }, [listFilterResetKey]);
+
+  useEffect(() => {
+    if (!isFileSearchExpanded) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      fileSearchInputRef.current?.focus();
+      fileSearchInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isFileSearchExpanded]);
 
   const resolveUploadTarget = useCallback(() => {
     if (!activeSessionId) return null;
@@ -555,12 +690,9 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
           sessionId: activeSessionId,
           path: normalizedPath,
         });
-        entries.sort((a, b) => {
-          if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
-          return a.name.localeCompare(b.name);
-        });
 
         const pathChanged = normalizeDirectoryPath(currentPathRef.current) !== normalizedPath;
+        const selectEntryName = options?.selectEntryName;
         if (historyMode === "push") {
           pushDirectoryHistory(normalizedPath);
         }
@@ -570,7 +702,16 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
           setCurrentPath(normalizedPath);
           setSelectedFiles((prev) => {
             if (pathChanged) {
+              const shouldSelectEntry =
+                !!selectEntryName && entries.some((entry) => entry.name === selectEntryName);
+              if (shouldSelectEntry) {
+                lastSelectedRef.current = selectEntryName;
+                pendingRevealNameRef.current = selectEntryName;
+                return new Set([selectEntryName]);
+              }
+
               lastSelectedRef.current = null;
+              pendingRevealNameRef.current = null;
               return new Set();
             }
 
@@ -1091,6 +1232,65 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     resolveUploadTarget,
   ]);
 
+  const filteredSortedFiles = useMemo(
+    () =>
+      files
+        .filter((entry) => matchesFileSearch(entry, fileSearchQuery))
+        .sort((left, right) => compareFileEntries(left, right, fileSortMode)),
+    [files, fileSearchQuery, fileSortMode],
+  );
+  const isFileSearchActive = fileSearchQuery.trim().length > 0;
+  const fileListGridTemplate = useMemo(
+    () => FILE_LIST_COLUMNS.map((column) => `${fileListColumnWidths[column.id]}px`).join(" "),
+    [fileListColumnWidths],
+  );
+  const fileListTableWidth = useMemo(
+    () => FILE_LIST_COLUMNS.reduce((sum, column) => sum + fileListColumnWidths[column.id], 0),
+    [fileListColumnWidths],
+  );
+
+  const handleSortColumn = useCallback((column: FileSortColumn) => {
+    setFileSortMode((prev) => {
+      if (prev.column === column) {
+        return {
+          column,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+
+      return {
+        column,
+        direction: DEFAULT_FILE_SORT_DIRECTIONS[column],
+      };
+    });
+  }, []);
+
+  const handleColumnResizeMouseDown = useCallback(
+    (column: FileSortColumn, event: ReactMouseEvent<HTMLSpanElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const startX = event.clientX;
+      const startWidth = fileListColumnWidths[column];
+      const minWidth = MIN_FILE_LIST_COLUMN_WIDTHS[column];
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const nextWidth = Math.max(minWidth, startWidth + moveEvent.clientX - startX);
+        setFileListColumnWidths((prev) =>
+          prev[column] === nextWidth ? prev : { ...prev, [column]: nextWidth },
+        );
+      };
+      const handleMouseUp = () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    },
+    [fileListColumnWidths],
+  );
+
   const getRangeSelection = useCallback(
     (
       anchorName: string,
@@ -1098,7 +1298,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       baseSelection = new Set<string>(),
       additive = false,
     ) => {
-      const names = files.map((file) => file.name);
+      const names = filteredSortedFiles.map((file) => file.name);
       const anchorIndex = names.indexOf(anchorName);
       const targetIndex = names.indexOf(targetName);
       if (anchorIndex < 0 || targetIndex < 0) {
@@ -1113,7 +1313,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
       }
       return next;
     },
-    [files],
+    [filteredSortedFiles],
   );
 
   const handleSelectionStart = useCallback(
@@ -1282,8 +1482,8 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
   };
 
   const selectedRealFiles = useMemo(
-    () => files.filter((file) => selectedFiles.has(file.name)),
-    [files, selectedFiles],
+    () => filteredSortedFiles.filter((file) => selectedFiles.has(file.name)),
+    [filteredSortedFiles, selectedFiles],
   );
   const fileAiActions = useMemo(
     () =>
@@ -1318,9 +1518,9 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     ) {
       event.preventDefault();
       event.stopPropagation();
-      const nextSelection = new Set(files.map((entry) => entry.name));
+      const nextSelection = new Set(filteredSortedFiles.map((entry) => entry.name));
       setSelectedFiles(nextSelection);
-      lastSelectedRef.current = files[0]?.name ?? null;
+      lastSelectedRef.current = filteredSortedFiles[0]?.name ?? null;
       return;
     }
 
@@ -1343,9 +1543,11 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
 
   const handleGoUp = () => {
     if (!currentPath || currentPath === "/") return;
+    const exitedName = currentPath.split("/").filter(Boolean).pop();
     const parts = currentPath.split("/");
     parts.pop();
-    void loadDirectory(parts.join("/") || "/");
+    setFileSearchQuery("");
+    void loadDirectory(parts.join("/") || "/", { selectEntryName: exitedName });
   };
 
   const handlePanelMouseDownCapture = useCallback((event: ReactMouseEvent<HTMLElement>) => {
@@ -1466,7 +1668,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     }
 
     if (selectedFiles.size > 1 && selectedFiles.has(entry.name)) {
-      return files.filter((file) => selectedFiles.has(file.name));
+      return filteredSortedFiles.filter((file) => selectedFiles.has(file.name));
     }
     return [entry];
   };
@@ -1659,22 +1861,24 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
 
   const displayEntries = useMemo(() => {
     if (!currentPath || currentPath === "/") {
-      return files;
+      return filteredSortedFiles;
     }
 
-    return [PARENT_DIRECTORY_ENTRY, ...files];
-  }, [currentPath, files]);
+    return [PARENT_DIRECTORY_ENTRY, ...filteredSortedFiles];
+  }, [currentPath, filteredSortedFiles]);
+  const hasNoSearchMatches = isFileSearchActive && filteredSortedFiles.length === 0;
 
   const visibleEntries = useMemo(() => {
     if (displayEntries.length === 0) {
       return displayEntries;
     }
 
+    const entriesScrollTop = Math.max(0, listScrollTop - FILE_LIST_HEADER_HEIGHT);
     const viewportHeight = listViewportHeight > 0 ? listViewportHeight : FILE_LIST_ITEM_HEIGHT * 12;
     const visibleCount = Math.max(1, Math.ceil(viewportHeight / FILE_LIST_ITEM_HEIGHT));
     const startIndex = Math.max(
       0,
-      Math.floor(listScrollTop / FILE_LIST_ITEM_HEIGHT) - FILE_LIST_OVERSCAN,
+      Math.floor(entriesScrollTop / FILE_LIST_ITEM_HEIGHT) - FILE_LIST_OVERSCAN,
     );
     const endIndex = Math.min(
       displayEntries.length,
@@ -1699,6 +1903,31 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
     return { top, bottom };
   }, [displayEntries, visibleEntries]);
 
+  useEffect(() => {
+    const entryName = pendingRevealNameRef.current;
+    const container = listContainerRef.current;
+    if (!entryName || !container) {
+      return;
+    }
+
+    const entryIndex = displayEntries.findIndex((entry) => entry.name === entryName);
+    if (entryIndex < 0) {
+      return;
+    }
+
+    pendingRevealNameRef.current = null;
+    const nextScrollTop = Math.max(
+      0,
+      FILE_LIST_HEADER_HEIGHT + entryIndex * FILE_LIST_ITEM_HEIGHT - FILE_LIST_ITEM_HEIGHT,
+    );
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTop = nextScrollTop;
+      setListScrollTop(nextScrollTop);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayEntries]);
+
   return (
     <aside
       className="h-full flex flex-col overflow-hidden"
@@ -1710,7 +1939,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
 
       {canBrowseFiles && (
         <div
-          className="flex items-center px-1.5 py-1 border-b gap-0.5"
+          className="relative flex items-center px-1.5 py-1 border-b gap-0.5"
           style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
         >
           <ToolbarIconButton
@@ -1803,6 +2032,67 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
           >
             <MdRefresh className="h-4 w-4" />
           </ToolbarIconButton>
+
+          <ToolbarDivider />
+
+          <div className="ml-auto">
+            <ToolbarIconButton
+              label={t("fileExplorer.search")}
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-md hover:text-foreground",
+                isFileSearchActive ? "bg-primary/10 text-primary" : "text-muted-foreground",
+              )}
+              onClick={() => setIsFileSearchExpanded(true)}
+            >
+              <MdSearch className="h-4 w-4 translate-y-px" />
+            </ToolbarIconButton>
+          </div>
+
+          {isFileSearchExpanded && (
+            <div
+              className="absolute inset-x-1.5 top-1 bottom-1 z-20 flex items-center gap-1 rounded-md border px-1.5 shadow-sm"
+              style={{
+                backgroundColor: "var(--df-bg-panel)",
+                borderColor: "var(--df-primary)",
+              }}
+            >
+              <MdSearch className="h-4 w-4 shrink-0 translate-y-px text-primary" />
+              <input
+                ref={fileSearchInputRef}
+                type="text"
+                value={fileSearchQuery}
+                onChange={(event) => setFileSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    if (fileSearchQuery) {
+                      setFileSearchQuery("");
+                    } else {
+                      setIsFileSearchExpanded(false);
+                    }
+                  }
+                }}
+                placeholder={t("fileExplorer.searchPlaceholder")}
+                className="h-full min-w-0 flex-1 bg-transparent px-1 text-xs text-[var(--df-text)] outline-none placeholder:text-[var(--df-text-dimmed)]"
+              />
+              <button
+                type="button"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--df-text-dimmed)] transition-colors hover:bg-[var(--df-bg-hover)] hover:text-[var(--df-text)]"
+                aria-label={fileSearchQuery ? t("fileExplorer.clearSearch") : t("common.close")}
+                onClick={() => {
+                  if (fileSearchQuery) {
+                    setFileSearchQuery("");
+                    fileSearchInputRef.current?.focus();
+                  } else {
+                    setIsFileSearchExpanded(false);
+                  }
+                }}
+              >
+                <MdClose className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1871,7 +2161,7 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
             )}
             <div
               ref={listContainerRef}
-              className="h-full overflow-y-auto p-2 text-sm terminal-scroll outline-none"
+              className="h-full overflow-auto text-sm terminal-scroll outline-none"
               tabIndex={canBrowseFiles ? 0 : -1}
               onMouseDown={() => {
                 if (canBrowseFiles) {
@@ -1897,80 +2187,149 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
                   <div className="text-sm block mb-2">{t("fileExplorer.unsupportedSession")}</div>
                   <div>{t("fileExplorer.unsupportedSessionDesc")}</div>
                 </div>
-              ) : directoryLoading ? (
-                <div
-                  className="text-center py-4 text-xs"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                >
-                  {t("fileExplorer.loading")}
-                </div>
-              ) : error ? (
-                <div className="text-center text-red-400 py-4 text-xs">{error}</div>
-              ) : displayEntries.length === 0 ? (
-                <div
-                  className="text-center py-4 text-xs"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                >
-                  {t("fileExplorer.emptyDirectory")}
-                </div>
               ) : (
-                <ul
-                  style={{
-                    paddingTop: virtualListPadding.top,
-                    paddingBottom: virtualListPadding.bottom,
-                  }}
-                >
-                  {visibleEntries.map((entry) => (
-                    <FileListItem
-                      key={entry.name}
-                      entry={entry}
-                      isSelected={selectedFiles.has(entry.name)}
-                      isParentDirectoryEntry={isParentDirectoryEntry(entry)}
-                      activeSessionId={activeSessionId}
-                      onSelectionStart={handleSelectionStart}
-                      onSelectionDrag={handleSelectionDrag}
-                      onContextMenuSelect={handleContextMenuSelection}
-                      onItemClick={handleItemClick}
-                      onOpenDefault={handleOpenDefault}
-                      onRefresh={() => void refreshCurrentDirectory()}
-                      onUpload={handleUploadFiles}
-                      onUploadFolder={handleUploadFolder}
-                      onDownload={handleDownloadFromContextMenu}
-                      onRename={(entry) => {
-                        if (activeSessionId)
-                          setRenameDialogData({
-                            sessionId: activeSessionId,
-                            oldPath: getEntryFullPath(entry),
-                            name: entry.name,
-                            currentDirPath: currentPath,
-                          });
+                <>
+                  <div
+                    className="sticky top-0 z-[1] h-7 border-b"
+                    style={{
+                      backgroundColor: "var(--df-bg-section-header)",
+                      borderColor: "var(--df-border)",
+                      minWidth: fileListTableWidth,
+                    }}
+                  >
+                    <div
+                      className="grid h-full"
+                      style={{
+                        gridTemplateColumns: fileListGridTemplate,
+                        width: fileListTableWidth,
                       }}
-                      onMove={(entry) => {
-                        if (activeSessionId)
-                          setMoveDialogData({
-                            sessionId: activeSessionId,
-                            oldPath: getEntryFullPath(entry),
-                            name: entry.name,
-                          });
+                    >
+                      {FILE_LIST_COLUMNS.map((column, index) => {
+                        const label = t(column.labelKey);
+                        const isActiveSort = fileSortMode.column === column.id;
+                        const SortDirectionIcon =
+                          fileSortMode.direction === "asc" ? MdArrowDropUp : MdArrowDropDown;
+
+                        return (
+                          <div
+                            key={column.id}
+                            className={cn("relative min-w-0 border-r", index === 0 && "border-l")}
+                            style={{
+                              borderColor: "var(--df-border)",
+                              backgroundColor: isActiveSort
+                                ? "color-mix(in srgb, var(--df-primary) 8%, var(--df-bg-section-header))"
+                                : undefined,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              aria-label={t("fileExplorer.sortByColumn", { column: label })}
+                              className={cn(
+                                "flex h-full w-full min-w-0 items-center gap-1 px-2 text-[0.625rem] font-medium transition-colors hover:text-foreground",
+                                column.align === "right" && "justify-end text-right",
+                                isActiveSort ? "text-primary" : "text-muted-foreground",
+                              )}
+                              onClick={() => handleSortColumn(column.id)}
+                            >
+                              <span className="truncate">{label}</span>
+                              {isActiveSort && <SortDirectionIcon className="h-3.5 w-3.5" />}
+                            </button>
+                            <span
+                              title={t("fileExplorer.resizeColumn", { column: label })}
+                              className="absolute right-0 top-1/2 h-4 w-1.5 -translate-y-1/2 cursor-col-resize rounded-sm transition-colors hover:bg-primary/50"
+                              onMouseDown={(event) => handleColumnResizeMouseDown(column.id, event)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {directoryLoading ? (
+                    <div
+                      className="px-2 py-4 text-center text-xs"
+                      style={{ color: "var(--df-text-dimmed)" }}
+                    >
+                      {t("fileExplorer.loading")}
+                    </div>
+                  ) : error ? (
+                    <div className="px-2 py-4 text-center text-xs text-red-400">{error}</div>
+                  ) : hasNoSearchMatches ? (
+                    <div
+                      className="px-2 py-4 text-center text-xs"
+                      style={{ color: "var(--df-text-dimmed)" }}
+                    >
+                      {t("fileExplorer.noSearchResults")}
+                    </div>
+                  ) : displayEntries.length === 0 ? (
+                    <div
+                      className="px-2 py-4 text-center text-xs"
+                      style={{ color: "var(--df-text-dimmed)" }}
+                    >
+                      {t("fileExplorer.emptyDirectory")}
+                    </div>
+                  ) : (
+                    <ul
+                      style={{
+                        paddingTop: virtualListPadding.top,
+                        paddingBottom: virtualListPadding.bottom + 8,
                       }}
-                      onDelete={handleDeleteFromContextMenu}
-                      onCopyPath={handleCopyPath}
-                      onSendToTerminal={handleSendToTerminal}
-                      onProperties={(entry) => {
-                        if (activeSessionId) {
-                          setPropertiesDialogData({
-                            sessionId: activeSessionId,
-                            fullPath: getEntryFullPath(entry),
-                            name: entry.name,
-                            is_dir: entry.is_dir,
-                          });
-                        }
-                      }}
-                      aiActions={getEntryAiActions(entry)}
-                      onAIAction={(entry, action) => void handleFileAIAction(entry, action)}
-                    />
-                  ))}
-                </ul>
+                    >
+                      {visibleEntries.map((entry) => (
+                        <FileListItem
+                          key={entry.name}
+                          entry={entry}
+                          isSelected={selectedFiles.has(entry.name)}
+                          isParentDirectoryEntry={isParentDirectoryEntry(entry)}
+                          activeSessionId={activeSessionId}
+                          columnTemplate={fileListGridTemplate}
+                          rowWidth={fileListTableWidth}
+                          onSelectionStart={handleSelectionStart}
+                          onSelectionDrag={handleSelectionDrag}
+                          onContextMenuSelect={handleContextMenuSelection}
+                          onItemClick={handleItemClick}
+                          onOpenDefault={handleOpenDefault}
+                          onRefresh={() => void refreshCurrentDirectory()}
+                          onUpload={handleUploadFiles}
+                          onUploadFolder={handleUploadFolder}
+                          onDownload={handleDownloadFromContextMenu}
+                          onRename={(entry) => {
+                            if (activeSessionId)
+                              setRenameDialogData({
+                                sessionId: activeSessionId,
+                                oldPath: getEntryFullPath(entry),
+                                name: entry.name,
+                                currentDirPath: currentPath,
+                              });
+                          }}
+                          onMove={(entry) => {
+                            if (activeSessionId)
+                              setMoveDialogData({
+                                sessionId: activeSessionId,
+                                oldPath: getEntryFullPath(entry),
+                                name: entry.name,
+                              });
+                          }}
+                          onDelete={handleDeleteFromContextMenu}
+                          onCopyPath={handleCopyPath}
+                          onSendToTerminal={handleSendToTerminal}
+                          onProperties={(entry) => {
+                            if (activeSessionId) {
+                              setPropertiesDialogData({
+                                sessionId: activeSessionId,
+                                fullPath: getEntryFullPath(entry),
+                                name: entry.name,
+                                is_dir: entry.is_dir,
+                              });
+                            }
+                          }}
+                          aiActions={getEntryAiActions(entry)}
+                          onAIAction={(entry, action) => void handleFileAIAction(entry, action)}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -2161,6 +2520,9 @@ function FileExplorer({ activeSessionId, activeSessionType }: FileExplorerProps)
                 is_symlink: false,
                 size: 0,
                 permissions: "",
+                owner: "",
+                group: "",
+                mtime: 0,
               };
               if (result.is_dir) {
                 handleItemClick(mockEntry);
