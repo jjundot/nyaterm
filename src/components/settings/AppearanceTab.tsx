@@ -131,15 +131,20 @@ export function AppearanceTab() {
                     });
                   }}
                 >
-                  <SelectTrigger className="h-9 min-w-0 w-full flex-1 px-3 text-sm shadow-xs focus:ring-1 focus:ring-ring focus:outline-none">
+                  <SelectTrigger
+                    className="h-9 min-w-0 w-full flex-1 px-3 text-sm shadow-xs focus:ring-1 focus:ring-ring focus:outline-none"
+                    style={{ fontFamily: `"${font}", sans-serif` }}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {!applicationFonts.includes(font) && (
-                      <SelectItem value={font}>{font} (Custom/Missing)</SelectItem>
+                      <SelectItem value={font} style={{ fontFamily: `"${font}", sans-serif` }}>
+                        {font} (Custom/Missing)
+                      </SelectItem>
                     )}
                     {applicationFonts.map((f) => (
-                      <SelectItem key={f} value={f}>
+                      <SelectItem key={f} value={f} style={{ fontFamily: `"${f}", sans-serif` }}>
                         {f} {PACKAGE_FONTS.includes(f) && `(${t("settings.fontBuiltIn")})`}
                       </SelectItem>
                     ))}
