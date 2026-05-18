@@ -6,7 +6,6 @@ import type {
   AIProviderKind,
   AIProviderProfile,
   AISettings,
-  RiskLevel,
 } from "@/types/global";
 
 export interface BuiltinProviderInfo {
@@ -400,24 +399,6 @@ export const AI_PROVIDERS: Array<{ value: AIProviderKind; label: string }> = [
   { value: "openai_compatible", label: "OpenAI Compatible" },
 ];
 
-export const RISK_LEVELS: Array<{ value: RiskLevel; labelKey: string }> = [
-  { value: "low", labelKey: "ai.riskLow" },
-  { value: "medium", labelKey: "ai.riskMedium" },
-  { value: "high", labelKey: "ai.riskHigh" },
-  { value: "critical", labelKey: "ai.riskCritical" },
-];
-
-export const riskRank: Record<RiskLevel, number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
-
-export function isRiskAllowed(risk: RiskLevel, allowed: RiskLevel) {
-  return riskRank[risk] <= riskRank[allowed];
-}
-
 const DEFAULT_PROVIDER_PROFILES: AIProviderProfile[] = [
   {
     id: "openai",
@@ -567,13 +548,11 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   enabled: false,
   context_line_limit: 200,
   redaction_enabled: true,
-  risk_check_enabled: true,
   allow_save_command: true,
   record_history: true,
   timeout_ms: 60000,
   active_profile_id: "openai",
   provider_profiles: DEFAULT_PROVIDER_PROFILES,
-  allowed_command_risk_level: "medium",
   default_mode: "ask",
   default_model_id: null,
   models: [],

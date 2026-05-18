@@ -276,10 +276,7 @@ function PaneXTerminal({
   syncGroups: import("@/types/global").SyncGroup[];
   broadcastToAll: boolean;
 }) {
-  const { tabs, savedConnections, setSyncGroups } = useApp();
-  const riskUsername = connectionId
-    ? savedConnections.find((connection) => connection.id === connectionId)?.username
-    : undefined;
+  const { tabs, setSyncGroups } = useApp();
 
   const syncPeerSessionIds = useMemo(() => {
     const peers = getSyncPeers(sessionId, syncGroups);
@@ -368,7 +365,6 @@ function PaneXTerminal({
       onReconnected={onReconnected}
       syncPeerSessionIds={syncPeerSessionIds}
       syncOverlay={syncOverlay}
-      riskUsername={riskUsername}
     />
   );
 }
