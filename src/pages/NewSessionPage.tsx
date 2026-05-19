@@ -31,6 +31,7 @@ export default function NewSessionPage() {
   const params = new URLSearchParams(window.location.search);
   const editId = params.get("edit") ?? undefined;
   const autoConnect = params.get("autoConnect") === "1";
+  const initialGroupId = editId ? "" : (params.get("groupId") ?? "");
   const targetLeafId = params.get("targetLeafId") ?? undefined;
   const anchorTabId = params.get("anchorTabId") ?? undefined;
   const sourceTabId = params.get("sourceTabId") ?? undefined;
@@ -38,7 +39,7 @@ export default function NewSessionPage() {
 
   const [initialData, setInitialData] = useState<SavedConnection | undefined>();
   const [name, setName] = useState("");
-  const [groupId, setGroupId] = useState("");
+  const [groupId, setGroupId] = useState(initialGroupId);
   const [newGroupNamePending, setNewGroupNamePending] = useState("");
   const [description, setDescription] = useState("");
   const [host, setHost] = useState("");

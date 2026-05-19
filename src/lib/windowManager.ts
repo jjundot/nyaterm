@@ -138,6 +138,7 @@ export interface NewSessionTarget {
   anchorTabId?: string | null;
   sourceTabId?: string;
   sourcePaneId?: string;
+  initialGroupId?: string;
 }
 
 export function openNewSession(editId?: string, autoConnect?: boolean, target?: NewSessionTarget) {
@@ -164,6 +165,9 @@ export function openNewSessionWithTarget(
   }
   if (target?.sourcePaneId) {
     url += `&sourcePaneId=${encodeURIComponent(target.sourcePaneId)}`;
+  }
+  if (!editId && target?.initialGroupId) {
+    url += `&groupId=${encodeURIComponent(target.initialGroupId)}`;
   }
   return openChildWindow({
     label: "new-session",

@@ -406,8 +406,12 @@ function App() {
     tabsRef.current = tabs;
   }, [tabs]);
 
-  const handleNewSession = useCallback((_parentGroupId?: string) => {
-    openNewSession();
+  const handleNewSession = useCallback((parentGroupId?: string) => {
+    openNewSession(
+      undefined,
+      undefined,
+      parentGroupId ? { initialGroupId: parentGroupId } : undefined,
+    );
   }, []);
 
   const handleEditConnection = useCallback(
