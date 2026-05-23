@@ -1,6 +1,6 @@
 //! Config persistence for sessions, UI, and quick commands.
 //!
-//! Stores JSON documents in `~/.nyaterm/nyaterm.redb`.
+//! Stores typed entities and small singleton documents in `~/.nyaterm/nyaterm.redb`.
 //! Credentials are AES-256-GCM encrypted in-place.
 
 mod cloud_sync;
@@ -63,21 +63,6 @@ pub use settings::{
 pub use tunnel::{load_tunnels, save_tunnels, TunnelConfig, TunnelsConfig};
 #[allow(unused_imports)]
 pub use ui::{ActivityBarLayout, RestorablePaneNode, RestorableTab, UiConfig};
-
-use crate::error::AppResult;
-use serde::Serialize;
-
-pub(crate) fn load_json_doc<T: serde::de::DeserializeOwned + Default>(key: &str) -> AppResult<T> {
-    crate::storage::load_json_doc(key)
-}
-
-pub(crate) fn save_json_doc<T: Serialize>(key: &str, data: &T) -> AppResult<()> {
-    crate::storage::save_json_doc(key, data)
-}
-
-pub(crate) fn load_json_raw_doc(key: &str) -> AppResult<Option<String>> {
-    crate::storage::load_json_doc_raw(key)
-}
 
 pub(crate) fn uuid_v4() -> String {
     uuid::Uuid::new_v4().to_string()

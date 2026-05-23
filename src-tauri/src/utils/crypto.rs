@@ -90,7 +90,7 @@ fn write_wrapped_master_key(
     let mut combined = nonce.to_vec();
     combined.extend_from_slice(&wrapped);
 
-    crate::storage::save_text_doc(crate::storage::TEXT_MASTER_KEY, &B64.encode(&combined))?;
+    crate::storage::save_master_key_token(&B64.encode(&combined))?;
     Ok(())
 }
 
@@ -133,7 +133,7 @@ fn unwrap_master_key_with_compatible_wrapping(
 
 /// Loads the master key from redb `master.key`, creating it on first use.
 fn get_master_key() -> AppResult<Key<Aes256Gcm>> {
-    if let Some(encoded) = crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)? {
+    if let Some(encoded) = crate::storage::load_master_key_token()? {
         let raw = B64
             .decode(encoded.trim())
             .map_err(|e| AppError::Crypto(format!("decode master.key: {e}")))?;
@@ -159,16 +159,15 @@ fn get_master_key() -> AppResult<Key<Aes256Gcm>> {
 /// `old_password` is the previous master password (`None` = home-path-based).
 /// `new_password` is the new master password (`None` = revert to home-path-based).
 pub fn rewrap_master_key(old_password: Option<&str>, new_password: Option<&str>) -> AppResult<()> {
-    let master_key =
-        if let Some(encoded) = crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)? {
-            let raw = B64
-                .decode(encoded.trim())
-                .map_err(|e| AppError::Crypto(format!("decode master.key: {e}")))?;
+    let master_key = if let Some(encoded) = crate::storage::load_master_key_token()? {
+        let raw = B64
+            .decode(encoded.trim())
+            .map_err(|e| AppError::Crypto(format!("decode master.key: {e}")))?;
 
-            unwrap_master_key_with_compatible_wrapping(&raw, old_password)?.0
-        } else {
-            Aes256Gcm::generate_key(OsRng)
-        };
+        unwrap_master_key_with_compatible_wrapping(&raw, old_password)?.0
+    } else {
+        Aes256Gcm::generate_key(OsRng)
+    };
 
     let new_wrapping = derive_wrapping_key(new_password)?;
     write_wrapped_master_key(&master_key, &new_wrapping)?;

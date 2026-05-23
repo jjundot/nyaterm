@@ -1,5 +1,6 @@
-use super::{load_json_doc, save_json_doc, uuid_v4};
+use super::uuid_v4;
 use crate::error::{AppError, AppResult};
+use crate::storage;
 use crate::utils::crypto;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -51,7 +52,9 @@ pub struct OtpConfig {
 
 pub fn load_otp_entries(app: &AppHandle) -> AppResult<OtpConfig> {
     let _ = app;
-    let mut config: OtpConfig = load_json_doc(crate::storage::JSON_OTP)?;
+    let mut config = OtpConfig {
+        entries: storage::list_otp_accounts()?,
+    };
     for entry in &mut config.entries {
         entry.has_secret = entry.secret.is_some();
     }
@@ -60,7 +63,7 @@ pub fn load_otp_entries(app: &AppHandle) -> AppResult<OtpConfig> {
 
 pub fn save_otp_entries(app: &AppHandle, config: &OtpConfig) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_OTP, config)
+    storage::replace_otp_accounts(config)
 }
 
 pub fn load_otp_entry_by_id(app: &AppHandle, id: &str) -> AppResult<OtpEntry> {

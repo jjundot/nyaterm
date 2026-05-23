@@ -112,17 +112,8 @@ impl SshHandler {
         Self { app, host, port }
     }
 
-    fn load_known_hosts(&self) -> String {
-        crate::storage::load_text_doc(crate::storage::TEXT_KNOWN_HOSTS)
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-    }
-
     fn append_known_host(&self, host_entry: &str) {
-        if let Err(error) =
-            crate::storage::append_text_line(crate::storage::TEXT_KNOWN_HOSTS, host_entry)
-        {
+        if let Err(error) = crate::storage::upsert_known_host(host_entry) {
             tracing::warn!(
                 host = %self.host,
                 port = self.port,
@@ -137,6 +128,7 @@ impl SshHandler {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum KnownHostCheck {
     Match,
@@ -144,6 +136,7 @@ enum KnownHostCheck {
     UnknownHost,
 }
 
+#[cfg(test)]
 fn check_known_host_entry(
     content: &str,
     host_identifier: &str,
@@ -172,17 +165,7 @@ fn check_known_host_entry(
 }
 
 fn replace_known_host_entry(host_identifier: &str, new_entry: &str) -> AppResult<()> {
-    let content =
-        crate::storage::load_text_doc(crate::storage::TEXT_KNOWN_HOSTS)?.unwrap_or_default();
-    let mut lines: Vec<&str> = content
-        .lines()
-        .filter(|line| {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            parts.len() < 3 || parts[0] != host_identifier
-        })
-        .collect();
-    lines.push(new_entry);
-    crate::storage::save_text_doc(crate::storage::TEXT_KNOWN_HOSTS, &(lines.join("\n") + "\n"))
+    crate::storage::replace_known_host_for_host(host_identifier, new_entry)
 }
 
 fn preferred_algorithms() -> Preferred {
@@ -273,13 +256,13 @@ impl client::Handler for SshHandler {
         };
 
         let host_entry = format!("{} {} {}", host_identifier, key_type, key_base64);
-        let content = self.load_known_hosts();
 
         let policy = crate::config::load_app_settings(&self.app)
             .map(|s| s.security.host_key_policy)
             .unwrap_or_else(|_| "prompt".to_string());
 
-        let check = check_known_host_entry(&content, &host_identifier, &key_type, &key_base64);
+        let check = crate::storage::check_known_host(&host_identifier, &key_type, &key_base64)
+            .unwrap_or(crate::storage::KnownHostCheck::UnknownHost);
 
         tracing::info!(
             host = %self.host, port = self.port,
@@ -289,11 +272,11 @@ impl client::Handler for SshHandler {
             "SSH host key check"
         );
 
-        if check == KnownHostCheck::Match {
+        if check == crate::storage::KnownHostCheck::Match {
             return Ok(true);
         }
 
-        let is_key_changed = check == KnownHostCheck::HostSeen;
+        let is_key_changed = check == crate::storage::KnownHostCheck::HostSeen;
 
         match policy.as_str() {
             "strict" => {

@@ -58,11 +58,13 @@ impl CommandHistoryStore {
             }
             fs::read_to_string(&path)?
         } else {
-            let Some(content) = crate::storage::load_json_doc_raw(crate::storage::JSON_HISTORY)?
-            else {
+            let entries = crate::storage::list_command_history_entries(MAX_HISTORY)?;
+            if entries.is_empty() {
                 return Ok(());
-            };
-            content
+            }
+            self.entries = entries;
+            self.dirty = false;
+            return Ok(());
         };
 
         if content.trim().is_empty() {
@@ -378,7 +380,8 @@ pub(crate) fn flush_prepared_save(pending: PreparedHistorySave) -> AppResult<()>
     match pending {
         PreparedHistorySave::File(path, bytes) => flush_to_disk(&path, &bytes),
         PreparedHistorySave::Redb(content) => {
-            crate::storage::save_json_doc_raw(crate::storage::JSON_HISTORY, &content)
+            let (entries, _) = load_history_entries(&content)?;
+            crate::storage::replace_command_history_entries(&entries)
         }
     }
 }

@@ -1,5 +1,6 @@
-use super::{load_json_doc, save_json_doc, uuid_v4};
+use super::uuid_v4;
 use crate::error::{AppError, AppResult};
+use crate::storage;
 use crate::utils::crypto;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -33,7 +34,9 @@ pub struct KeysConfig {
 
 pub fn load_keys(app: &AppHandle) -> AppResult<KeysConfig> {
     let _ = app;
-    let mut config: KeysConfig = load_json_doc(crate::storage::JSON_KEYS)?;
+    let mut config = KeysConfig {
+        keys: storage::list_ssh_keys()?,
+    };
     for k in &mut config.keys {
         k.has_key_data = k.key.is_some();
     }
@@ -42,7 +45,7 @@ pub fn load_keys(app: &AppHandle) -> AppResult<KeysConfig> {
 
 pub fn save_keys(app: &AppHandle, config: &KeysConfig) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_KEYS, config)
+    storage::replace_ssh_keys(config)
 }
 
 pub fn load_key_by_id(app: &AppHandle, id: &str) -> AppResult<SshKey> {

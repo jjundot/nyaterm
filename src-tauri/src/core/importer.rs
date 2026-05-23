@@ -403,6 +403,8 @@ pub fn import_sessions(app: tauri::AppHandle, file_path: String) -> AppResult<us
                         name: segments[depth - 1].clone(),
                         parent_id,
                         sort_order: next_sort,
+                        created_at_ms: None,
+                        updated_at_ms: None,
                     });
                     next_sort += 1;
                     path_map.insert(prefix, id.clone());
@@ -434,6 +436,9 @@ pub fn import_sessions(app: tauri::AppHandle, file_path: String) -> AppResult<us
                 has_password: false,
             }),
             network: None,
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
         });
     }
 

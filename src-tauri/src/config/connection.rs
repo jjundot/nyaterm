@@ -1,8 +1,9 @@
 use super::{
-    load_app_settings, load_json_raw_doc, load_proxies, save_app_settings, save_json_doc,
-    save_proxies, uuid_v4, ProxyConfig, ProxySettings,
+    load_app_settings, load_proxies, save_app_settings, save_proxies, uuid_v4, ProxyConfig,
+    ProxySettings,
 };
 use crate::error::{AppError, AppResult};
+use crate::storage;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -162,6 +163,12 @@ pub struct SavedConnection {
     pub auth: Option<ConnectionAuth>,
     #[serde(default)]
     pub network: Option<ConnectionNetwork>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used_at_ms: Option<u64>,
 }
 
 /// Group for organizing saved connections in the UI.
@@ -175,6 +182,10 @@ pub struct Group {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub sort_order: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at_ms: Option<u64>,
 }
 
 /// Root config for groups and saved connections.
@@ -193,40 +204,7 @@ pub type AppConfig = SessionsConfig;
 
 pub fn load_sessions(app: &AppHandle) -> AppResult<SessionsConfig> {
     let _ = app;
-    let Some(content) = load_json_raw_doc(crate::storage::JSON_SESSIONS)? else {
-        return Ok(SessionsConfig::default());
-    };
-
-    let raw: serde_json::Value = serde_json::from_str(&content)?;
-
-    let groups: Vec<Group> = raw
-        .get("groups")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    let raw_connections = raw
-        .get("connections")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    let mut connections = Vec::new();
-    for raw_conn in raw_connections {
-        if raw_conn.get("type").is_none() {
-            tracing::warn!("Skipping unsupported legacy connection entry without type");
-            continue;
-        }
-
-        match serde_json::from_value::<SavedConnection>(raw_conn) {
-            Ok(conn) => connections.push(conn),
-            Err(e) => tracing::warn!("Skipping malformed connection: {e}"),
-        }
-    }
-
-    Ok(SessionsConfig {
-        groups,
-        connections,
-    })
+    storage::load_sessions()
 }
 
 /// Saves sessions config to disk.
@@ -255,7 +233,7 @@ pub fn save_sessions(app: &AppHandle, config: &SessionsConfig) -> AppResult<()> 
             auth.has_password = false;
         }
     }
-    save_json_doc(crate::storage::JSON_SESSIONS, &sanitized)
+    storage::replace_sessions(&sanitized)
 }
 
 /// Loads the main app config (sessions + groups).
@@ -326,11 +304,8 @@ fn migrate_connection_proxies_to_standalone(
 ///
 /// Returns `AppError::SessionNotFound` if no connection with that ID exists.
 pub fn load_connection_by_id(app: &AppHandle, id: &str) -> AppResult<SavedConnection> {
-    let cfg = load_config(app)?;
-    let conn = cfg
-        .connections
-        .into_iter()
-        .find(|c| c.id == id)
+    let _ = app;
+    let conn = storage::get_connection(id)?
         .ok_or_else(|| AppError::SessionNotFound(format!("Connection '{}' not found", id)))?;
     Ok(conn)
 }

@@ -1,5 +1,6 @@
-use super::{default_true, load_json_doc, save_json_doc, uuid_v4};
+use super::{default_true, uuid_v4};
 use crate::error::AppResult;
+use crate::storage::{self, SettingsDocKey};
 use crate::utils::crypto;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -252,12 +253,12 @@ fn default_history_version() -> u32 {
 
 pub fn load_cloud_sync_settings(app: &AppHandle) -> AppResult<CloudSyncSettings> {
     let _ = app;
-    load_json_doc(crate::storage::JSON_CLOUD_SYNC)
+    storage::load_settings_doc(SettingsDocKey::CloudSyncSettings)
 }
 
 pub fn load_cloud_sync_state(app: &AppHandle) -> AppResult<CloudSyncState> {
     let _ = app;
-    let mut state: CloudSyncState = load_json_doc(crate::storage::JSON_CLOUD_SYNC_STATE)?;
+    let mut state: CloudSyncState = storage::load_settings_doc(SettingsDocKey::CloudSyncState)?;
     if state.device_id.is_empty() {
         state.device_id = uuid_v4();
     }
@@ -266,7 +267,7 @@ pub fn load_cloud_sync_state(app: &AppHandle) -> AppResult<CloudSyncState> {
 
 pub fn save_cloud_sync_state(app: &AppHandle, state: &CloudSyncState) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_CLOUD_SYNC_STATE, state)
+    storage::save_settings_doc(SettingsDocKey::CloudSyncState, state)
 }
 
 pub fn decrypt_cloud_sync_settings(

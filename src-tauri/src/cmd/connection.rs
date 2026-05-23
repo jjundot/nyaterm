@@ -148,6 +148,9 @@ mod tests {
                 proxy_id: None,
                 proxy_jump_id: Some(jump_id.to_string()),
             }),
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
         }
     }
 
@@ -170,6 +173,9 @@ mod tests {
                 proxy_id: None,
                 proxy_jump_id: Some(jump_id.to_string()),
             }),
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
         }
     }
 

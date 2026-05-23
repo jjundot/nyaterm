@@ -72,7 +72,9 @@ const MAX_BACKGROUND_IMAGE_SIZE: u64 = 50 * 1024 * 1024; // 50 MB
 pub fn read_background_image_data_url(path: String) -> AppResult<String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err(AppError::Config("Background image path is empty".to_string()));
+        return Err(AppError::Config(
+            "Background image path is empty".to_string(),
+        ));
     }
 
     let path = PathBuf::from(trimmed);

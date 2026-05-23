@@ -1,5 +1,6 @@
-use super::{load_json_doc, save_json_doc, uuid_v4};
+use super::uuid_v4;
 use crate::error::AppResult;
+use crate::storage;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -32,26 +33,14 @@ pub struct ProxyConfig {
     pub password: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct ProxiesConfig {
-    #[serde(default)]
-    proxies: Vec<ProxyConfig>,
-}
-
 pub fn load_proxies(app: &AppHandle) -> AppResult<Vec<ProxyConfig>> {
     let _ = app;
-    let cfg: ProxiesConfig = load_json_doc(crate::storage::JSON_PROXIES)?;
-    Ok(cfg.proxies)
+    storage::list_proxies()
 }
 
 pub fn save_proxies(app: &AppHandle, proxies: &[ProxyConfig]) -> AppResult<()> {
     let _ = app;
-    save_json_doc(
-        crate::storage::JSON_PROXIES,
-        &ProxiesConfig {
-            proxies: proxies.to_vec(),
-        },
-    )
+    storage::replace_proxies(proxies)
 }
 
 pub fn load_proxy_by_id(app: &AppHandle, id: &str) -> AppResult<Option<ProxyConfig>> {

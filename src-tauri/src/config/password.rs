@@ -1,5 +1,6 @@
-use super::{load_json_doc, save_json_doc, uuid_v4};
+use super::uuid_v4;
 use crate::error::{AppError, AppResult};
+use crate::storage;
 use crate::utils::crypto;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -26,7 +27,9 @@ pub struct PasswordsConfig {
 
 pub fn load_passwords(app: &AppHandle) -> AppResult<PasswordsConfig> {
     let _ = app;
-    let mut config: PasswordsConfig = load_json_doc(crate::storage::JSON_PASSWORDS)?;
+    let mut config = PasswordsConfig {
+        passwords: storage::list_passwords()?,
+    };
     for p in &mut config.passwords {
         p.has_password = p.password.is_some();
     }
@@ -35,7 +38,7 @@ pub fn load_passwords(app: &AppHandle) -> AppResult<PasswordsConfig> {
 
 pub fn save_passwords(app: &AppHandle, config: &PasswordsConfig) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_PASSWORDS, config)
+    storage::replace_passwords(config)
 }
 
 pub fn load_password_by_id(app: &AppHandle, id: &str) -> AppResult<SavedPassword> {

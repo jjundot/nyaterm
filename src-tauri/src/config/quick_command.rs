@@ -1,5 +1,5 @@
-use super::{load_json_doc, save_json_doc};
 use crate::error::AppResult;
+use crate::storage::{self, SettingsDocKey};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -48,11 +48,11 @@ pub struct QuickCommandsConfig {
 /// Loads quick commands from local app storage.
 pub fn load_quick_commands(app: &AppHandle) -> AppResult<QuickCommandsConfig> {
     let _ = app;
-    load_json_doc(crate::storage::JSON_QUICK_COMMAND)
+    storage::load_settings_doc(SettingsDocKey::QuickCommands)
 }
 
 /// Saves quick commands to local app storage.
 pub fn save_quick_commands(app: &AppHandle, config: &QuickCommandsConfig) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_QUICK_COMMAND, config)
+    storage::save_settings_doc(SettingsDocKey::QuickCommands, config)
 }

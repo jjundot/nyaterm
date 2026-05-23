@@ -17,7 +17,17 @@ pub async fn create_ssh_session(
 ) -> AppResult<String> {
     let ssh_config = ssh::load_saved_ssh_config(&app, &connection_id)?;
 
-    ssh::create_ssh_session(app, state.inner().clone(), ssh_config, Some(connection_id)).await
+    let session_id = ssh::create_ssh_session(
+        app,
+        state.inner().clone(),
+        ssh_config,
+        Some(connection_id.clone()),
+    )
+    .await?;
+    if let Err(error) = crate::storage::mark_connection_used(&connection_id) {
+        tracing::warn!(connection_id, %error, "Failed to mark connection as recently used");
+    }
+    Ok(session_id)
 }
 
 #[tauri::command]
@@ -43,7 +53,13 @@ pub async fn create_local_session(
     } else {
         None
     };
-    core::create_local_session(app, state.inner().clone(), config).await
+    let session_id = core::create_local_session(app, state.inner().clone(), config).await?;
+    if let Some(connection_id) = connection_id {
+        if let Err(error) = crate::storage::mark_connection_used(&connection_id) {
+            tracing::warn!(connection_id, %error, "Failed to mark connection as recently used");
+        }
+    }
+    Ok(session_id)
 }
 
 #[tauri::command]
@@ -78,7 +94,16 @@ pub async fn create_telnet_session(
             "del".to_string(),
         )
     };
-    core::create_telnet_session(app, state.inner().clone(), h, p, connection_id, n, bs_mode).await
+    let marked_connection_id = connection_id.clone();
+    let session_id =
+        core::create_telnet_session(app, state.inner().clone(), h, p, connection_id, n, bs_mode)
+            .await?;
+    if let Some(connection_id) = marked_connection_id {
+        if let Err(error) = crate::storage::mark_connection_used(&connection_id) {
+            tracing::warn!(connection_id, %error, "Failed to mark connection as recently used");
+        }
+    }
+    Ok(session_id)
 }
 
 #[tauri::command]
@@ -131,7 +156,15 @@ pub async fn create_serial_session(
             backspace_mode: "ctrl_h".to_string(),
         }
     };
-    core::create_serial_session(app, state.inner().clone(), cfg, connection_id).await
+    let marked_connection_id = connection_id.clone();
+    let session_id =
+        core::create_serial_session(app, state.inner().clone(), cfg, connection_id).await?;
+    if let Some(connection_id) = marked_connection_id {
+        if let Err(error) = crate::storage::mark_connection_used(&connection_id) {
+            tracing::warn!(connection_id, %error, "Failed to mark connection as recently used");
+        }
+    }
+    Ok(session_id)
 }
 
 #[tauri::command]

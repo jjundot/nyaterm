@@ -32,8 +32,8 @@ use super::cloud_sync::{
     CloudSyncSettings,
 };
 use super::ui::UiConfig;
-use super::{load_json_doc, save_json_doc};
 use crate::error::AppResult;
+use crate::storage::{self, SettingsDocKey};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::AppHandle;
@@ -72,11 +72,11 @@ pub struct AppSettings {
 }
 
 pub fn load_app_settings(app: &AppHandle) -> AppResult<AppSettings> {
-    let mut settings: AppSettings = load_json_doc(crate::storage::JSON_SETTINGS)?;
-    let has_embedded_cloud_sync = super::load_json_raw_doc(crate::storage::JSON_SETTINGS)?
-        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .and_then(|value| value.get("cloud_sync").cloned())
-        .is_some();
+    let mut settings: AppSettings = storage::load_settings_doc(SettingsDocKey::AppSettings)?;
+    let has_embedded_cloud_sync =
+        storage::load_settings_doc::<serde_json::Value>(SettingsDocKey::AppSettings)?
+            .get("cloud_sync")
+            .is_some();
 
     let mut migrated = false;
     let mut secrets_ready_for_persist = true;
@@ -277,5 +277,5 @@ fn persist_migrated_app_settings(app: &AppHandle, settings: &AppSettings) {
 
 pub fn save_app_settings(app: &AppHandle, config: &AppSettings) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_SETTINGS, config)
+    storage::save_settings_doc(SettingsDocKey::AppSettings, config)
 }

@@ -2,10 +2,9 @@
 //! worked for each host so subsequent connections skip failed probes.
 
 use crate::storage;
+use crate::storage::SettingsDocKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-pub(crate) const JSON_FILE_BACKEND_CACHE: &str = "file-backend-cache";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub(crate) struct FileBackendCache {
@@ -30,7 +29,8 @@ pub(crate) fn cache_key(host: &str, port: u16, username: &str) -> String {
 }
 
 pub(crate) fn load_cached_backend(key: &str) -> Option<String> {
-    let cache: FileBackendCache = storage::load_json_doc(JSON_FILE_BACKEND_CACHE).ok()?;
+    let cache: FileBackendCache =
+        storage::load_settings_doc(SettingsDocKey::SftpFileBackendCache).ok()?;
     cache
         .entries
         .get(key)
@@ -48,16 +48,19 @@ pub(crate) fn save_cached_backend(
         .unwrap_or_default()
         .as_secs();
 
-    let _ = storage::update_json_doc::<FileBackendCache, (), _>(JSON_FILE_BACKEND_CACHE, |cache| {
-        cache.entries.insert(
-            key.to_string(),
-            FileBackendCacheEntry {
-                last_working_backend: backend.to_string(),
-                sftp_unavailable,
-                last_failure_reason: failure_reason,
-                updated_at: now,
-            },
-        );
-        Ok(())
-    });
+    let _ = storage::update_settings_doc::<FileBackendCache, (), _>(
+        SettingsDocKey::SftpFileBackendCache,
+        |cache| {
+            cache.entries.insert(
+                key.to_string(),
+                FileBackendCacheEntry {
+                    last_working_backend: backend.to_string(),
+                    sftp_unavailable,
+                    last_failure_reason: failure_reason,
+                    updated_at: now,
+                },
+            );
+            Ok(())
+        },
+    );
 }

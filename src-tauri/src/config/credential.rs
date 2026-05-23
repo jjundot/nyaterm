@@ -1,5 +1,6 @@
-use super::{load_json_doc, save_json_doc, uuid_v4};
+use super::uuid_v4;
 use crate::error::{AppError, AppResult};
+use crate::storage;
 use crate::utils::crypto;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -37,7 +38,9 @@ pub struct CredentialsConfig {
 
 pub fn load_credentials(app: &AppHandle) -> AppResult<CredentialsConfig> {
     let _ = app;
-    let mut config: CredentialsConfig = load_json_doc(crate::storage::JSON_CREDENTIALS)?;
+    let mut config = CredentialsConfig {
+        credentials: storage::list_credentials()?,
+    };
     for credential in &mut config.credentials {
         credential.has_password = credential.password.is_some();
     }
@@ -46,7 +49,7 @@ pub fn load_credentials(app: &AppHandle) -> AppResult<CredentialsConfig> {
 
 pub fn save_credentials(app: &AppHandle, config: &CredentialsConfig) -> AppResult<()> {
     let _ = app;
-    save_json_doc(crate::storage::JSON_CREDENTIALS, config)
+    storage::replace_credentials(config)
 }
 
 pub fn load_credential_by_id(app: &AppHandle, id: &str) -> AppResult<SavedCredential> {

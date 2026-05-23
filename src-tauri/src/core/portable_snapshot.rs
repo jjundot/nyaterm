@@ -14,13 +14,14 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::{QuickCommandsStore, SessionManager};
 
-const PORTABLE_SNAPSHOT_SCHEMA_VERSION: u32 = 2;
+const PORTABLE_SNAPSHOT_SCHEMA_VERSION: u32 = 3;
 const SNAPSHOT_META_KEY: &str = "meta";
 const SNAPSHOT_JSON_PORTABLE_SETTINGS: &str = "portable-settings";
 
 const SNAPSHOT_META_TABLE: TableDefinition<&str, &str> = TableDefinition::new("snapshot_meta");
-const SNAPSHOT_JSON_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("json_docs");
-const SNAPSHOT_TEXT_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("text_docs");
+const SNAPSHOT_ENTITIES_TABLE: TableDefinition<&str, &str> = TableDefinition::new("entity_docs");
+const SNAPSHOT_V2_JSON_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("json_docs");
+const SNAPSHOT_V2_TEXT_DOCS_TABLE: TableDefinition<&str, &str> = TableDefinition::new("text_docs");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -38,10 +39,29 @@ pub struct PortableSnapshot {
     pub created_at_ms: u64,
     pub payload_hash: String,
     pub app_version: String,
+    pub settings: PortableAppSettings,
     #[serde(default)]
-    pub json_docs: BTreeMap<String, String>,
+    pub sessions: config::SessionsConfig,
     #[serde(default)]
-    pub text_docs: BTreeMap<String, String>,
+    pub keys: config::KeysConfig,
+    #[serde(default)]
+    pub passwords: config::PasswordsConfig,
+    #[serde(default)]
+    pub credentials: config::CredentialsConfig,
+    #[serde(default)]
+    pub otp: config::OtpConfig,
+    #[serde(default)]
+    pub proxies: Vec<config::ProxyConfig>,
+    #[serde(default)]
+    pub tunnels: Vec<config::TunnelConfig>,
+    #[serde(default)]
+    pub quick_commands: config::QuickCommandsConfig,
+    #[serde(default)]
+    pub history: Vec<crate::core::history::HistoryEntry>,
+    #[serde(default)]
+    pub master_key_token: Option<String>,
+    #[serde(default)]
+    pub known_hosts: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,8 +91,18 @@ impl From<&PortableSnapshot> for PortableSnapshotMeta {
 
 #[derive(Serialize)]
 struct SnapshotHashInput<'a> {
-    json_docs: &'a BTreeMap<String, String>,
-    text_docs: &'a BTreeMap<String, String>,
+    settings: &'a PortableAppSettings,
+    sessions: &'a config::SessionsConfig,
+    keys: &'a config::KeysConfig,
+    passwords: &'a config::PasswordsConfig,
+    credentials: &'a config::CredentialsConfig,
+    otp: &'a config::OtpConfig,
+    proxies: &'a [config::ProxyConfig],
+    tunnels: &'a [config::TunnelConfig],
+    quick_commands: &'a config::QuickCommandsConfig,
+    history: &'a [crate::core::history::HistoryEntry],
+    master_key_token: &'a Option<String>,
+    known_hosts: &'a str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,94 +198,35 @@ pub fn build_portable_snapshot(
 ) -> AppResult<PortableSnapshot> {
     let _ = config::load_config(app)?;
     let settings = config::load_app_settings(app)?;
+    let history = if snapshot_kind == PortableSnapshotKind::Backup {
+        crate::storage::list_command_history_entries(usize::MAX)?
+    } else {
+        Vec::new()
+    };
 
-    let mut json_docs = BTreeMap::new();
-    json_docs.insert(
-        crate::storage::JSON_SESSIONS.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_SESSIONS,
-            &serde_json::to_string_pretty(&config::SessionsConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_KEYS.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_KEYS,
-            &serde_json::to_string_pretty(&config::KeysConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_PASSWORDS.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_PASSWORDS,
-            &serde_json::to_string_pretty(&config::PasswordsConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_CREDENTIALS.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_CREDENTIALS,
-            &serde_json::to_string_pretty(&config::CredentialsConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_OTP.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_OTP,
-            &serde_json::to_string_pretty(&config::OtpConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_PROXIES.to_string(),
-        read_json_doc_or_default(crate::storage::JSON_PROXIES, "{\n  \"proxies\": []\n}")?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_TUNNELS.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_TUNNELS,
-            &serde_json::to_string_pretty(&config::TunnelsConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        crate::storage::JSON_QUICK_COMMAND.to_string(),
-        read_json_doc_or_default(
-            crate::storage::JSON_QUICK_COMMAND,
-            &serde_json::to_string_pretty(&config::QuickCommandsConfig::default())?,
-        )?,
-    );
-    json_docs.insert(
-        SNAPSHOT_JSON_PORTABLE_SETTINGS.to_string(),
-        serde_json::to_string_pretty(&PortableAppSettings::from_app_settings(&settings))?,
-    );
-
-    if snapshot_kind == PortableSnapshotKind::Backup {
-        json_docs.insert(
-            crate::storage::JSON_HISTORY.to_string(),
-            read_json_doc_or_default(
-                crate::storage::JSON_HISTORY,
-                "{\n  \"version\": 2,\n  \"entries\": []\n}",
-            )?,
-        );
-    }
-
-    let mut text_docs = BTreeMap::new();
-    if let Some(master_key) = crate::storage::load_text_doc(crate::storage::TEXT_MASTER_KEY)? {
-        text_docs.insert(crate::storage::TEXT_MASTER_KEY.to_string(), master_key);
-    }
-
-    let payload_hash = calculate_payload_hash(&json_docs, &text_docs)?;
-
-    Ok(PortableSnapshot {
+    let mut snapshot = PortableSnapshot {
         schema_version: PORTABLE_SNAPSHOT_SCHEMA_VERSION,
         snapshot_kind,
         revision_id: uuid::Uuid::new_v4().to_string(),
         device_id: device_id.to_string(),
         created_at_ms: current_time_ms(),
-        payload_hash,
+        payload_hash: String::new(),
         app_version: app.package_info().version.to_string(),
-        json_docs,
-        text_docs,
-    })
+        settings: PortableAppSettings::from_app_settings(&settings),
+        sessions: config::load_sessions(app)?,
+        keys: config::load_keys(app)?,
+        passwords: config::load_passwords(app)?,
+        credentials: config::load_credentials(app)?,
+        otp: config::load_otp_entries(app)?,
+        proxies: config::load_proxies(app)?,
+        tunnels: config::load_tunnels(app)?,
+        quick_commands: config::load_quick_commands(app)?,
+        history,
+        master_key_token: crate::storage::load_master_key_token()?,
+        known_hosts: crate::storage::render_known_hosts_export()?,
+    };
+    snapshot.payload_hash = calculate_payload_hash(&snapshot)?;
+    Ok(snapshot)
 }
 
 pub fn decode_portable_snapshot(bytes: &[u8]) -> AppResult<PortableSnapshot> {
@@ -276,16 +247,31 @@ pub fn decode_portable_snapshot(bytes: &[u8]) -> AppResult<PortableSnapshot> {
             .to_string();
         let meta: PortableSnapshotMeta = serde_json::from_str(&meta_raw)?;
 
-        PortableSnapshot {
-            schema_version: meta.schema_version,
-            snapshot_kind: meta.snapshot_kind,
-            revision_id: meta.revision_id,
-            device_id: meta.device_id,
-            created_at_ms: meta.created_at_ms,
-            payload_hash: meta.payload_hash,
-            app_version: meta.app_version,
-            json_docs: read_string_table(&read, SNAPSHOT_JSON_DOCS_TABLE)?,
-            text_docs: read_string_table(&read, SNAPSHOT_TEXT_DOCS_TABLE)?,
+        if meta.schema_version == 2 {
+            decode_v2_snapshot(&read, meta)?
+        } else {
+            let entities = read_string_table(&read, SNAPSHOT_ENTITIES_TABLE)?;
+            PortableSnapshot {
+                schema_version: meta.schema_version,
+                snapshot_kind: meta.snapshot_kind,
+                revision_id: meta.revision_id,
+                device_id: meta.device_id,
+                created_at_ms: meta.created_at_ms,
+                payload_hash: meta.payload_hash,
+                app_version: meta.app_version,
+                settings: read_entity(&entities, "settings")?,
+                sessions: read_entity_or_default(&entities, "sessions")?,
+                keys: read_entity_or_default(&entities, "keys")?,
+                passwords: read_entity_or_default(&entities, "passwords")?,
+                credentials: read_entity_or_default(&entities, "credentials")?,
+                otp: read_entity_or_default(&entities, "otp")?,
+                proxies: read_entity_or_default(&entities, "proxies")?,
+                tunnels: read_entity_or_default(&entities, "tunnels")?,
+                quick_commands: read_entity_or_default(&entities, "quick_commands")?,
+                history: read_entity_or_default(&entities, "history")?,
+                master_key_token: read_entity_or_default(&entities, "master_key_token")?,
+                known_hosts: read_entity_or_default(&entities, "known_hosts")?,
+            }
         }
     };
 
@@ -306,26 +292,26 @@ pub fn encode_portable_snapshot(snapshot: &PortableSnapshot) -> AppResult<Vec<u8
             meta.insert(SNAPSHOT_META_KEY, meta_content.as_str())
                 .map_err(storage_error)?;
         }
-        {
-            let mut json_docs = txn
-                .open_table(SNAPSHOT_JSON_DOCS_TABLE)
-                .map_err(storage_error)?;
-            for (key, value) in &snapshot.json_docs {
-                json_docs
-                    .insert(key.as_str(), value.as_str())
-                    .map_err(storage_error)?;
-            }
-        }
-        {
-            let mut text_docs = txn
-                .open_table(SNAPSHOT_TEXT_DOCS_TABLE)
-                .map_err(storage_error)?;
-            for (key, value) in &snapshot.text_docs {
-                text_docs
-                    .insert(key.as_str(), value.as_str())
-                    .map_err(storage_error)?;
-            }
-        }
+        let mut entities = txn
+            .open_table(SNAPSHOT_ENTITIES_TABLE)
+            .map_err(storage_error)?;
+        insert_entity(&mut entities, "settings", &snapshot.settings)?;
+        insert_entity(&mut entities, "sessions", &snapshot.sessions)?;
+        insert_entity(&mut entities, "keys", &snapshot.keys)?;
+        insert_entity(&mut entities, "passwords", &snapshot.passwords)?;
+        insert_entity(&mut entities, "credentials", &snapshot.credentials)?;
+        insert_entity(&mut entities, "otp", &snapshot.otp)?;
+        insert_entity(&mut entities, "proxies", &snapshot.proxies)?;
+        insert_entity(&mut entities, "tunnels", &snapshot.tunnels)?;
+        insert_entity(&mut entities, "quick_commands", &snapshot.quick_commands)?;
+        insert_entity(&mut entities, "history", &snapshot.history)?;
+        insert_entity(
+            &mut entities,
+            "master_key_token",
+            &snapshot.master_key_token,
+        )?;
+        insert_entity(&mut entities, "known_hosts", &snapshot.known_hosts)?;
+        drop(entities);
         txn.commit().map_err(storage_error)?;
     }
 
@@ -338,23 +324,27 @@ pub async fn apply_portable_snapshot(
 ) -> AppResult<()> {
     validate_portable_snapshot(snapshot)?;
 
-    for (key, contents) in &snapshot.json_docs {
-        if key == SNAPSHOT_JSON_PORTABLE_SETTINGS {
-            continue;
-        }
-        if is_snapshot_json_doc_key(key) {
-            crate::storage::save_json_doc_raw(key, contents)?;
-        }
-    }
+    config::save_sessions(app, &snapshot.sessions)?;
+    config::save_keys(app, &snapshot.keys)?;
+    config::save_passwords(app, &snapshot.passwords)?;
+    config::save_credentials(app, &snapshot.credentials)?;
+    config::save_otp_entries(app, &snapshot.otp)?;
+    config::save_proxies(app, &snapshot.proxies)?;
+    config::save_tunnels(app, &snapshot.tunnels)?;
+    config::save_quick_commands(app, &snapshot.quick_commands)?;
+    crate::storage::replace_command_history_entries(&snapshot.history)?;
 
-    if let Some(settings_raw) = snapshot.json_docs.get(SNAPSHOT_JSON_PORTABLE_SETTINGS) {
-        let portable: PortableAppSettings = serde_json::from_str(settings_raw)?;
-        let merged = portable.apply_to(config::load_app_settings(app).unwrap_or_default());
-        config::save_app_settings(app, &merged)?;
-    }
+    let merged = snapshot
+        .settings
+        .clone()
+        .apply_to(config::load_app_settings(app).unwrap_or_default());
+    config::save_app_settings(app, &merged)?;
 
-    if let Some(master_key) = snapshot.text_docs.get(crate::storage::TEXT_MASTER_KEY) {
-        crate::storage::save_text_doc(crate::storage::TEXT_MASTER_KEY, master_key)?;
+    if let Some(master_key) = &snapshot.master_key_token {
+        crate::storage::save_master_key_token(master_key)?;
+    }
+    if !snapshot.known_hosts.is_empty() {
+        crate::storage::replace_known_hosts_export(&snapshot.known_hosts)?;
     }
 
     let quick_commands_store = app.state::<Arc<QuickCommandsStore>>();
@@ -382,7 +372,7 @@ fn validate_portable_snapshot(snapshot: &PortableSnapshot) -> AppResult<()> {
             snapshot.schema_version
         )));
     }
-    let actual = calculate_payload_hash(&snapshot.json_docs, &snapshot.text_docs)?;
+    let actual = calculate_payload_hash(snapshot)?;
     if actual != snapshot.payload_hash {
         return Err(AppError::Crypto(
             "Portable snapshot payload hash mismatch".to_string(),
@@ -391,34 +381,153 @@ fn validate_portable_snapshot(snapshot: &PortableSnapshot) -> AppResult<()> {
     Ok(())
 }
 
-fn calculate_payload_hash(
+fn calculate_payload_hash(snapshot: &PortableSnapshot) -> AppResult<String> {
+    let payload_bytes = serde_json::to_vec(&SnapshotHashInput {
+        settings: &snapshot.settings,
+        sessions: &snapshot.sessions,
+        keys: &snapshot.keys,
+        passwords: &snapshot.passwords,
+        credentials: &snapshot.credentials,
+        otp: &snapshot.otp,
+        proxies: &snapshot.proxies,
+        tunnels: &snapshot.tunnels,
+        quick_commands: &snapshot.quick_commands,
+        history: &snapshot.history,
+        master_key_token: &snapshot.master_key_token,
+        known_hosts: &snapshot.known_hosts,
+    })?;
+    Ok(hex::encode(Sha256::digest(&payload_bytes)))
+}
+
+#[derive(Deserialize, Default)]
+struct V2ProxiesConfig {
+    #[serde(default)]
+    proxies: Vec<config::ProxyConfig>,
+}
+
+#[derive(Deserialize, Default)]
+struct V2HistoryStore {
+    #[serde(default)]
+    entries: Vec<crate::core::history::HistoryEntry>,
+}
+
+#[derive(Serialize)]
+struct V2SnapshotHashInput<'a> {
+    json_docs: &'a BTreeMap<String, String>,
+    text_docs: &'a BTreeMap<String, String>,
+}
+
+fn decode_v2_snapshot(
+    read: &redb::ReadTransaction,
+    meta: PortableSnapshotMeta,
+) -> AppResult<PortableSnapshot> {
+    let json_docs = read_string_table(read, SNAPSHOT_V2_JSON_DOCS_TABLE)?;
+    let text_docs = read_string_table(read, SNAPSHOT_V2_TEXT_DOCS_TABLE)?;
+    let expected = calculate_v2_payload_hash(&json_docs, &text_docs)?;
+    if expected != meta.payload_hash {
+        return Err(AppError::Crypto(
+            "Portable snapshot payload hash mismatch".to_string(),
+        ));
+    }
+
+    let settings = if let Some(raw) = json_docs.get(SNAPSHOT_JSON_PORTABLE_SETTINGS) {
+        serde_json::from_str(raw)?
+    } else if let Some(raw) = json_docs.get("settings") {
+        PortableAppSettings::from_app_settings(&serde_json::from_str::<AppSettings>(raw)?)
+    } else {
+        PortableAppSettings::from_app_settings(&AppSettings::default())
+    };
+
+    let history = json_docs
+        .get("history")
+        .map(|raw| serde_json::from_str::<V2HistoryStore>(raw).map(|store| store.entries))
+        .transpose()?
+        .unwrap_or_default();
+    let proxies = json_docs
+        .get("proxies")
+        .map(|raw| serde_json::from_str::<V2ProxiesConfig>(raw).map(|cfg| cfg.proxies))
+        .transpose()?
+        .unwrap_or_default();
+    let tunnels = json_docs
+        .get("tunnels")
+        .map(|raw| serde_json::from_str::<config::TunnelsConfig>(raw).map(|cfg| cfg.tunnels))
+        .transpose()?
+        .unwrap_or_default();
+
+    let mut snapshot = PortableSnapshot {
+        schema_version: PORTABLE_SNAPSHOT_SCHEMA_VERSION,
+        snapshot_kind: meta.snapshot_kind,
+        revision_id: meta.revision_id,
+        device_id: meta.device_id,
+        created_at_ms: meta.created_at_ms,
+        payload_hash: String::new(),
+        app_version: meta.app_version,
+        settings,
+        sessions: parse_v2_json_doc(&json_docs, "sessions")?,
+        keys: parse_v2_json_doc(&json_docs, "keys")?,
+        passwords: parse_v2_json_doc(&json_docs, "passwords")?,
+        credentials: parse_v2_json_doc(&json_docs, "credentials")?,
+        otp: parse_v2_json_doc(&json_docs, "otp")?,
+        proxies,
+        tunnels,
+        quick_commands: parse_v2_json_doc(&json_docs, "quick-command")?,
+        history,
+        master_key_token: text_docs.get("master.key").cloned(),
+        known_hosts: text_docs.get("known_hosts").cloned().unwrap_or_default(),
+    };
+    snapshot.payload_hash = calculate_payload_hash(&snapshot)?;
+    Ok(snapshot)
+}
+
+fn parse_v2_json_doc<T>(docs: &BTreeMap<String, String>, key: &str) -> AppResult<T>
+where
+    T: serde::de::DeserializeOwned + Default,
+{
+    docs.get(key)
+        .map(|raw| serde_json::from_str(raw).map_err(Into::into))
+        .transpose()
+        .map(|value| value.unwrap_or_default())
+}
+
+fn calculate_v2_payload_hash(
     json_docs: &BTreeMap<String, String>,
     text_docs: &BTreeMap<String, String>,
 ) -> AppResult<String> {
-    let payload_bytes = serde_json::to_vec(&SnapshotHashInput {
+    let payload_bytes = serde_json::to_vec(&V2SnapshotHashInput {
         json_docs,
         text_docs,
     })?;
     Ok(hex::encode(Sha256::digest(&payload_bytes)))
 }
 
-fn read_json_doc_or_default(key: &str, default_contents: &str) -> AppResult<String> {
-    Ok(crate::storage::load_json_doc_raw(key)?.unwrap_or_else(|| default_contents.to_string()))
+fn insert_entity<T>(table: &mut redb::Table<'_, &str, &str>, key: &str, value: &T) -> AppResult<()>
+where
+    T: Serialize,
+{
+    let raw = serde_json::to_string(value)?;
+    table.insert(key, raw.as_str()).map_err(storage_error)?;
+    Ok(())
 }
 
-fn is_snapshot_json_doc_key(key: &str) -> bool {
-    matches!(
-        key,
-        crate::storage::JSON_SESSIONS
-            | crate::storage::JSON_KEYS
-            | crate::storage::JSON_PASSWORDS
-            | crate::storage::JSON_CREDENTIALS
-            | crate::storage::JSON_OTP
-            | crate::storage::JSON_PROXIES
-            | crate::storage::JSON_TUNNELS
-            | crate::storage::JSON_QUICK_COMMAND
-            | crate::storage::JSON_HISTORY
-    )
+fn read_entity<T>(entities: &BTreeMap<String, String>, key: &str) -> AppResult<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let raw = entities
+        .get(key)
+        .ok_or_else(|| AppError::Config(format!("portable snapshot missing entity '{key}'")))?;
+    serde_json::from_str(raw).map_err(Into::into)
+}
+
+fn read_entity_or_default<T>(entities: &BTreeMap<String, String>, key: &str) -> AppResult<T>
+where
+    T: serde::de::DeserializeOwned + Default,
+{
+    entities
+        .get(key)
+        .map(|raw| serde_json::from_str(raw).map_err(Into::into))
+        .transpose()
+        .map(|value| value.unwrap_or_default())
 }
 
 fn read_string_table(
@@ -477,12 +586,10 @@ impl Drop for TempRedbFile {
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_payload_hash, encode_portable_snapshot, is_snapshot_json_doc_key,
-        PortableAppSettings, PortableSnapshot, PortableSnapshotKind, PortableUiSettings,
-        PORTABLE_SNAPSHOT_SCHEMA_VERSION,
+        calculate_payload_hash, encode_portable_snapshot, PortableAppSettings, PortableSnapshot,
+        PortableSnapshotKind, PortableUiSettings, PORTABLE_SNAPSHOT_SCHEMA_VERSION,
     };
     use crate::config::{self, ActivityBarLayout, AppSettings};
-    use std::collections::BTreeMap;
 
     #[test]
     fn portable_settings_strip_master_password_and_preserve_device_ui_state_on_apply() {
@@ -507,75 +614,74 @@ mod tests {
         assert_eq!(merged.ui.saved_connections_sort_mode, "name-asc");
     }
 
-    #[test]
-    fn portable_snapshot_hash_is_stable_for_sorted_docs() {
-        let left_json = BTreeMap::from([
-            ("sessions".to_string(), "{\"connections\":[]}".to_string()),
-            ("keys".to_string(), "{\"keys\":[]}".to_string()),
-        ]);
-        let right_json = BTreeMap::from([
-            ("keys".to_string(), "{\"keys\":[]}".to_string()),
-            ("sessions".to_string(), "{\"connections\":[]}".to_string()),
-        ]);
-        let text_docs = BTreeMap::from([("master.key".to_string(), "wrapped".to_string())]);
-
-        assert_eq!(
-            calculate_payload_hash(&left_json, &text_docs).expect("left hash"),
-            calculate_payload_hash(&right_json, &text_docs).expect("right hash")
-        );
+    fn sample_portable_settings() -> PortableAppSettings {
+        PortableAppSettings {
+            general: config::GeneralSettings::default(),
+            appearance: config::AppearanceSettings::default(),
+            proxy: config::ProxySettings::default(),
+            search: config::SearchSettings::default(),
+            translation: config::TranslationSettings::default(),
+            security: config::SecuritySettings::default(),
+            terminal: config::TerminalSettings::default(),
+            interaction: config::InteractionSettings::default(),
+            transfer: config::TransferSettings::default(),
+            diagnostics: config::DiagnosticsSettings::default(),
+            ui: PortableUiSettings {
+                language: Some("en".to_string()),
+                show_remote_stats: false,
+                remote_stats_interval: 3,
+                saved_connections_sort_mode: "default".to_string(),
+                activity_bar_layout: ActivityBarLayout::default(),
+            },
+        }
     }
 
-    #[test]
-    fn portable_snapshot_accepts_credentials_doc() {
-        assert!(is_snapshot_json_doc_key(crate::storage::JSON_CREDENTIALS));
-    }
-
-    #[test]
-    fn portable_snapshot_redb_roundtrip() {
-        let json_docs = BTreeMap::from([(
-            "portable-settings".to_string(),
-            serde_json::to_string(&PortableAppSettings {
-                general: config::GeneralSettings::default(),
-                appearance: config::AppearanceSettings::default(),
-                proxy: config::ProxySettings::default(),
-                search: config::SearchSettings::default(),
-                translation: config::TranslationSettings::default(),
-                security: config::SecuritySettings::default(),
-                terminal: config::TerminalSettings::default(),
-                interaction: config::InteractionSettings::default(),
-                transfer: config::TransferSettings::default(),
-                diagnostics: config::DiagnosticsSettings::default(),
-                ui: PortableUiSettings {
-                    language: Some("en".to_string()),
-                    show_remote_stats: false,
-                    remote_stats_interval: 3,
-                    saved_connections_sort_mode: "default".to_string(),
-                    activity_bar_layout: ActivityBarLayout::default(),
-                },
-            })
-            .expect("serialize portable settings"),
-        )]);
-        let text_docs = BTreeMap::from([("master.key".to_string(), "wrapped".to_string())]);
-        let payload_hash =
-            calculate_payload_hash(&json_docs, &text_docs).expect("calculate payload hash");
-        let snapshot = PortableSnapshot {
+    fn sample_snapshot() -> PortableSnapshot {
+        let mut snapshot = PortableSnapshot {
             schema_version: PORTABLE_SNAPSHOT_SCHEMA_VERSION,
             snapshot_kind: PortableSnapshotKind::Sync,
             revision_id: "rev".to_string(),
             device_id: "dev".to_string(),
             created_at_ms: 1,
-            payload_hash,
+            payload_hash: String::new(),
             app_version: "1.0.0".to_string(),
-            json_docs,
-            text_docs,
+            settings: sample_portable_settings(),
+            sessions: config::SessionsConfig::default(),
+            keys: config::KeysConfig::default(),
+            passwords: config::PasswordsConfig::default(),
+            credentials: config::CredentialsConfig::default(),
+            otp: config::OtpConfig::default(),
+            proxies: Vec::new(),
+            tunnels: Vec::new(),
+            quick_commands: config::QuickCommandsConfig::default(),
+            history: Vec::new(),
+            master_key_token: Some("wrapped".to_string()),
+            known_hosts: "example.com ssh-ed25519 AAAA\n".to_string(),
         };
+        snapshot.payload_hash = calculate_payload_hash(&snapshot).expect("hash snapshot");
+        snapshot
+    }
+
+    #[test]
+    fn portable_snapshot_hash_changes_when_entity_changes() {
+        let left = sample_snapshot();
+        let mut right = sample_snapshot();
+        right.master_key_token = Some("different".to_string());
+        right.payload_hash = calculate_payload_hash(&right).expect("right hash");
+
+        assert_ne!(left.payload_hash, right.payload_hash);
+    }
+
+    #[test]
+    fn portable_snapshot_redb_roundtrip() {
+        let snapshot = sample_snapshot();
 
         let encoded = encode_portable_snapshot(&snapshot).expect("encode snapshot");
         let decoded = super::decode_portable_snapshot(&encoded).expect("decode snapshot");
 
         assert_eq!(decoded.revision_id, snapshot.revision_id);
         assert_eq!(decoded.payload_hash, snapshot.payload_hash);
-        assert_eq!(decoded.json_docs, snapshot.json_docs);
-        assert_eq!(decoded.text_docs, snapshot.text_docs);
+        assert_eq!(decoded.master_key_token, snapshot.master_key_token);
+        assert_eq!(decoded.known_hosts, snapshot.known_hosts);
     }
 }

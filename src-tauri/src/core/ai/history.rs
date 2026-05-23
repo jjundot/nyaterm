@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 use crate::error::AppResult;
+use crate::storage::{self, SettingsDocKey};
 
 use super::types::{
     now_rfc3339, uuid, AiAuditLog, AiChatRequest, AiMessage, AiMessageRole, AiSession,
@@ -29,7 +30,7 @@ const AI_HISTORY_MAX_MESSAGES: usize = 2_000;
 const AI_AUDIT_MAX_LOGS: usize = 2_000;
 
 pub(super) fn load_history(_app: &AppHandle) -> AppResult<AiHistoryFile> {
-    crate::storage::load_json_doc(crate::storage::JSON_AI_HISTORY)
+    storage::load_settings_doc(SettingsDocKey::AiHistory)
 }
 
 pub(super) fn trim_history(history: &mut AiHistoryFile) {
@@ -92,41 +93,38 @@ pub(super) fn save_user_message(
     let session_id = session_id.to_string();
 
     let _ = app;
-    crate::storage::update_json_doc::<AiHistoryFile, _, _>(
-        crate::storage::JSON_AI_HISTORY,
-        |history| {
-            if let Some(session) = history
-                .sessions
-                .iter_mut()
-                .find(|item| item.id == session_id)
-            {
-                session.updated_at = now.clone();
-            } else {
-                history.sessions.push(AiSession {
-                    id: session_id.clone(),
-                    connection_id,
-                    title: if title.is_empty() {
-                        "AI Session".to_string()
-                    } else {
-                        title
-                    },
-                    created_at: now.clone(),
-                    updated_at: now.clone(),
-                });
-            }
-            history.messages.push(AiMessage {
-                id: format!("msg-{}", uuid()),
-                session_id,
-                role: AiMessageRole::User,
-                content: user_input,
-                created_at: now,
-                reasoning_content: None,
-                command_cards: vec![],
+    storage::update_settings_doc::<AiHistoryFile, _, _>(SettingsDocKey::AiHistory, |history| {
+        if let Some(session) = history
+            .sessions
+            .iter_mut()
+            .find(|item| item.id == session_id)
+        {
+            session.updated_at = now.clone();
+        } else {
+            history.sessions.push(AiSession {
+                id: session_id.clone(),
+                connection_id,
+                title: if title.is_empty() {
+                    "AI Session".to_string()
+                } else {
+                    title
+                },
+                created_at: now.clone(),
+                updated_at: now.clone(),
             });
-            trim_history(history);
-            Ok(())
-        },
-    )
+        }
+        history.messages.push(AiMessage {
+            id: format!("msg-{}", uuid()),
+            session_id,
+            role: AiMessageRole::User,
+            content: user_input,
+            created_at: now,
+            reasoning_content: None,
+            command_cards: vec![],
+        });
+        trim_history(history);
+        Ok(())
+    })
 }
 
 pub(super) fn append_message(app: &AppHandle, message: AiMessage) -> AppResult<()> {
@@ -140,21 +138,18 @@ pub(super) fn append_message(app: &AppHandle, message: AiMessage) -> AppResult<(
     );
 
     let _ = app;
-    crate::storage::update_json_doc::<AiHistoryFile, _, _>(
-        crate::storage::JSON_AI_HISTORY,
-        |history| {
-            if let Some(session) = history
-                .sessions
-                .iter_mut()
-                .find(|item| item.id == message.session_id)
-            {
-                session.updated_at = message.created_at.clone();
-            }
-            history.messages.push(message);
-            trim_history(history);
-            Ok(())
-        },
-    )
+    storage::update_settings_doc::<AiHistoryFile, _, _>(SettingsDocKey::AiHistory, |history| {
+        if let Some(session) = history
+            .sessions
+            .iter_mut()
+            .find(|item| item.id == message.session_id)
+        {
+            session.updated_at = message.created_at.clone();
+        }
+        history.messages.push(message);
+        trim_history(history);
+        Ok(())
+    })
 }
 
 pub fn get_ai_sessions(app: &AppHandle) -> AppResult<Vec<AiSession>> {
@@ -174,20 +169,17 @@ pub fn get_ai_messages(app: &AppHandle, session_id: String) -> AppResult<Vec<AiM
 pub fn clear_ai_history(app: &AppHandle) -> AppResult<()> {
     let _ = app;
     super::stream::cancel_all_chat_streams();
-    crate::storage::save_json_doc(crate::storage::JSON_AI_HISTORY, &AiHistoryFile::default())
+    storage::save_settings_doc(SettingsDocKey::AiHistory, &AiHistoryFile::default())
 }
 
 pub fn delete_ai_session(app: &AppHandle, session_id: String) -> AppResult<()> {
     let _ = app;
-    crate::storage::update_json_doc::<AiHistoryFile, _, _>(
-        crate::storage::JSON_AI_HISTORY,
-        |history| {
-            history.sessions.retain(|s| s.id != session_id);
-            history.messages.retain(|m| m.session_id != session_id);
-            trim_history(history);
-            Ok(())
-        },
-    )
+    storage::update_settings_doc::<AiHistoryFile, _, _>(SettingsDocKey::AiHistory, |history| {
+        history.sessions.retain(|s| s.id != session_id);
+        history.messages.retain(|m| m.session_id != session_id);
+        trim_history(history);
+        Ok(())
+    })
 }
 
 pub fn append_ai_audit(app: &AppHandle, request: AppendAiAuditRequest) -> AppResult<AiAuditLog> {
@@ -214,7 +206,7 @@ pub fn append_ai_audit(app: &AppHandle, request: AppendAiAuditRequest) -> AppRes
         blocked: request.blocked,
         created_at: now_rfc3339(),
     };
-    crate::storage::update_json_doc::<AiAuditFile, _, _>(crate::storage::JSON_AI_AUDIT, |file| {
+    storage::update_settings_doc::<AiAuditFile, _, _>(SettingsDocKey::AiAudit, |file| {
         file.logs.push(log.clone());
         if file.logs.len() > AI_AUDIT_MAX_LOGS {
             let keep_from = file.logs.len().saturating_sub(AI_AUDIT_MAX_LOGS);
@@ -226,8 +218,7 @@ pub fn append_ai_audit(app: &AppHandle, request: AppendAiAuditRequest) -> AppRes
 
 pub fn get_ai_audit_logs(app: &AppHandle, limit: Option<usize>) -> AppResult<Vec<AiAuditLog>> {
     let _ = app;
-    let mut logs =
-        crate::storage::load_json_doc::<AiAuditFile>(crate::storage::JSON_AI_AUDIT)?.logs;
+    let mut logs = storage::load_settings_doc::<AiAuditFile>(SettingsDocKey::AiAudit)?.logs;
     logs.sort_by(|left, right| right.created_at.cmp(&left.created_at));
     if let Some(limit) = limit {
         logs.truncate(limit);
