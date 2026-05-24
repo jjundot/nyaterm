@@ -447,10 +447,6 @@ export function matchesKeyEvent(keys: string, e: KeyboardEvent): boolean {
 
   return combos.some(
     (c) =>
-      c.ctrl === ctrl &&
-      c.meta === meta &&
-      c.shift === shift &&
-      c.alt === alt &&
-      c.code === code,
+      c.ctrl === ctrl && c.meta === meta && c.shift === shift && c.alt === alt && c.code === code,
   );
 }

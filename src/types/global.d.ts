@@ -355,6 +355,9 @@ export interface QuickCommand {
   execution_mode?: string;
   source?: "manual" | "ai";
   risk_level?: RiskLevel;
+  updated_at?: number;
+  created_at?: number;
+  use_count?: number;
 }
 
 export interface QuickCommandsConfig {

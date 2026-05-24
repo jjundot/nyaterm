@@ -427,6 +427,16 @@ pub fn upsert_quick_command(
     Ok(())
 }
 
+#[tauri::command]
+pub fn increment_quick_command_use_count(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<QuickCommandsStore>>,
+    id: String,
+) -> AppResult<()> {
+    state.increment_use_count(&app, &id)?;
+    Ok(())
+}
+
 // --- Password management ---
 
 #[tauri::command]

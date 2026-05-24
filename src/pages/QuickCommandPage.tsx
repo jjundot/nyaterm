@@ -95,8 +95,9 @@ export default function QuickCommandPage() {
       finalCategoryId = newId;
     }
 
+    const now = Date.now();
     const cmd: QuickCommand = {
-      id: initialData?.id || `qc-${Date.now()}`,
+      id: initialData?.id || `qc-${now}`,
       label: label.trim(),
       command: command.trim(),
       category_id: finalCategoryId,
@@ -105,6 +106,9 @@ export default function QuickCommandPage() {
       icon_tag: iconTag,
       pinned,
       execution_mode: executionMode,
+      updated_at: now,
+      created_at: initialData?.created_at ?? now,
+      use_count: initialData?.use_count,
     };
 
     setSaving(true);

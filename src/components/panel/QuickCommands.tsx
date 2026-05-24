@@ -13,6 +13,7 @@ import {
   MdPushPin,
   MdSearch,
   MdSend,
+  MdSort,
   MdTerminal,
 } from "react-icons/md";
 import PanelHeader from "@/components/layout/PanelHeader";
@@ -23,6 +24,13 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -68,6 +76,7 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
   // UI State
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [sortMode, setSortMode] = useState<"updated" | "name" | "useCount">("updated");
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiPopoverOpen, setAiPopoverOpen] = useState(false);
 
@@ -115,6 +124,15 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
 
   const handleDelete = useCallback((id: string) => {
     setCommands((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const incrementUseCount = useCallback((id: string) => {
+    setCommands((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, use_count: (c.use_count ?? 0) + 1, updated_at: Date.now() } : c,
+      ),
+    );
+    invoke("increment_quick_command_use_count", { id }).catch(() => {});
   }, []);
 
   // Listen for quick-command-saved events from child window
@@ -189,23 +207,23 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
 
   const handleCommandClick = useCallback(
     (cmd: QuickCommand) => {
+      incrementUseCount(cmd.id);
       const vars = parseCommandVariables(cmd.command);
 
       if (vars.length > 0) {
-        // Need user input
         setPromptCmd(cmd);
         setPromptVars(vars);
       } else {
-        // All resolved or no variables
         onSend(cmd.command, cmd.execution_mode !== "append");
       }
     },
-    [onSend],
+    [onSend, incrementUseCount],
   );
 
   const handleSendToAll = useCallback(
     (cmd: QuickCommand) => {
       if (!onSendToAll) return;
+      incrementUseCount(cmd.id);
       const vars = parseCommandVariables(cmd.command);
       if (vars.length > 0) {
         setPromptCmd(cmd);
@@ -215,7 +233,7 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
         onSendToAll(cmd.command);
       }
     },
-    [onSendToAll],
+    [onSendToAll, incrementUseCount],
   );
 
   const handlePromptSubmit = useCallback(
@@ -258,14 +276,12 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
   const filteredCommands = useMemo(() => {
     let filtered = commands;
 
-    // Category filter
     if (selectedCategory === "uncategorized") {
       filtered = filtered.filter((c) => !c.category_id);
     } else if (selectedCategory !== "all") {
       filtered = filtered.filter((c) => c.category_id === selectedCategory);
     }
 
-    // Search filter
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       filtered = filtered.filter(
@@ -276,15 +292,23 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
       );
     }
 
-    // Sort: Pinned first
-    filtered.sort((a, b) => {
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
-      return 0; // maintain original order within pinned/unpinned
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      const pinDiff = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+      if (pinDiff !== 0) return pinDiff;
+
+      switch (sortMode) {
+        case "name":
+          return a.label.localeCompare(b.label);
+        case "useCount":
+          return (b.use_count ?? 0) - (a.use_count ?? 0);
+        default:
+          return (b.updated_at ?? 0) - (a.updated_at ?? 0);
+      }
     });
 
-    return filtered;
-  }, [commands, search, selectedCategory]);
+    return sorted;
+  }, [commands, search, selectedCategory, sortMode]);
 
   const searchQuery = search.trim();
   const hasActiveFilters = searchQuery.length > 0 || selectedCategory !== "all";
@@ -354,6 +378,44 @@ function QuickCommands({ onSend, onSendToAll }: QuickCommandsProps) {
                   </SelectContent>
                 </Select>
               </div>
+
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-6 w-6 shrink-0 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
+                        style={{
+                          color:
+                            sortMode !== "updated" ? "var(--df-primary)" : "var(--df-text-muted)",
+                        }}
+                        aria-label={t("quickCommands.sort")}
+                      >
+                        <MdSort className="text-[1.05rem]" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{t("quickCommands.sort")}</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuRadioGroup
+                    value={sortMode}
+                    onValueChange={(v) => setSortMode(v as typeof sortMode)}
+                  >
+                    <DropdownMenuRadioItem value="updated" className="text-xs">
+                      {t("quickCommands.sortByUpdated")}
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="name" className="text-xs">
+                      {t("quickCommands.sortByName")}
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="useCount" className="text-xs">
+                      {t("quickCommands.sortByUseCount")}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <Tooltip>
                 <TooltipTrigger asChild>

@@ -135,6 +135,7 @@ pub fn run() {
             cmd::connection::get_quick_commands,
             cmd::connection::save_quick_commands,
             cmd::connection::upsert_quick_command,
+            cmd::connection::increment_quick_command_use_count,
             cmd::connection::get_saved_passwords,
             cmd::connection::get_saved_password_value,
             cmd::connection::save_password,

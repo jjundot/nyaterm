@@ -235,9 +235,7 @@ export default function AppLayout({
                 <div
                   className="flex items-center justify-center h-full text-slate-500"
                   style={{
-                    backgroundColor: backgroundEnabled
-                      ? "var(--df-bg-terminal)"
-                      : undefined,
+                    backgroundColor: backgroundEnabled ? "var(--df-bg-terminal)" : undefined,
                   }}
                 >
                   <div className="text-center space-y-3">

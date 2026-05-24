@@ -29,6 +29,12 @@ pub struct QuickCommand {
     pub source: Option<String>,
     #[serde(default)]
     pub risk_level: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<u64>,
+    #[serde(default)]
+    pub created_at: Option<u64>,
+    #[serde(default)]
+    pub use_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
