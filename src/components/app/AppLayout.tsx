@@ -16,7 +16,6 @@ import ResizeHandle from "@/components/layout/ResizeHandle";
 import QuickCommands from "@/components/panel/QuickCommands";
 import SerialSendPanel from "@/components/panel/SendCommandPanel";
 import TabWindowsWorkspace from "@/components/terminal/TabWindowsWorkspace";
-import { Toaster } from "@/components/ui/sonner";
 import { useTheme } from "@/context/ThemeContext";
 import {
   buildBackgroundImageLayerStyle,
@@ -377,8 +376,6 @@ export default function AppLayout({
           request={dialogs.hostKeyVerifyRequest}
           onDone={dialogs.onHostKeyVerifyDone}
         />
-
-        <Toaster position="bottom-right" />
 
         {dialogs.modalChildWindowCount > 0 && (
           <div

@@ -9,6 +9,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource-variable/noto-sans-sc";
 import "./i18n";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { Toaster } from "./components/ui/sonner";
 import "./index.css";
 import { applyThemeToDOM, THEME_CACHE_KEY, ThemeProvider } from "./context/ThemeContext";
 import { DEFAULT_THEME_ID, themes } from "./lib/themes";
@@ -36,6 +37,7 @@ if (windowType) {
         <ChildAppProvider>
           <ThemeProvider>
             <ChildWindowRouter windowType={windowType} />
+            <Toaster />
           </ThemeProvider>
         </ChildAppProvider>
       </ErrorBoundary>
@@ -52,6 +54,7 @@ if (windowType) {
         <AppProvider>
           <ThemeProvider>
             <App />
+            <Toaster />
           </ThemeProvider>
         </AppProvider>
       </ErrorBoundary>
