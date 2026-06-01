@@ -87,6 +87,26 @@ function deletePreviousWord(state: TerminalInputState): TerminalInputState {
   };
 }
 
+export function deleteTerminalInputRange(
+  state: TerminalInputState,
+  start: number,
+  end: number,
+): TerminalInputState {
+  const length = state.value.length;
+  const from = Math.max(0, Math.min(length, Math.trunc(start)));
+  const to = Math.max(from, Math.min(length, Math.trunc(end)));
+
+  if (to <= from) {
+    return state;
+  }
+
+  return {
+    ...state,
+    value: `${state.value.slice(0, from)}${state.value.slice(to)}`,
+    cursor: from,
+  };
+}
+
 function markDesynced(
   state: TerminalInputState,
   reason: "tab" | "terminal",
