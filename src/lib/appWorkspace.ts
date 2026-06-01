@@ -1,13 +1,8 @@
 import type { TerminalWindowNode } from "@/lib/tabWindows";
 import { collectSessionPanes } from "@/lib/workspaceTabs";
-import type { ActivityBarLayout, SessionPane, Tab } from "@/types/global";
+import type { ActivityBarLayout, SessionPane, SessionType, Tab } from "@/types/global";
 
-export const NON_PANEL_IDS = new Set([
-  "settings",
-  "lock",
-  "quickCmdBar",
-  "serialSend",
-]);
+export const NON_PANEL_IDS = new Set(["settings", "lock", "quickCmdBar", "serialSend"]);
 
 export type TrayAction =
   | { type: "open_new_session" }
@@ -30,13 +25,17 @@ export function hasLiveSession<T extends Pick<SessionPane, "connecting" | "conne
   return !!pane && !pane.connecting && !pane.connectError;
 }
 
+export function isNonSerialSessionType(type: SessionType): boolean {
+  return type === "SSH" || type === "Local" || type === "Telnet";
+}
+
 export function getItemSide(id: string, layout: ActivityBarLayout): "left" | "right" | null {
   if (layout.left_top.includes(id) || layout.left_bottom.includes(id)) return "left";
   if (layout.right_top.includes(id) || layout.right_bottom.includes(id)) return "right";
   return null;
 }
 
-export function collectActiveShellSessionIds(
+export function collectActiveNonSerialSessionIds(
   layout: TerminalWindowNode | null,
   tabsById: Map<string, Tab>,
 ) {
@@ -56,7 +55,7 @@ export function collectActiveShellSessionIds(
       if (!tab) continue;
 
       for (const pane of collectSessionPanes(tab.root)) {
-        if (hasLiveSession(pane) && pane.type === "SSH") {
+        if (hasLiveSession(pane) && isNonSerialSessionType(pane.type)) {
           sessionIds.add(pane.sessionId);
         }
       }
