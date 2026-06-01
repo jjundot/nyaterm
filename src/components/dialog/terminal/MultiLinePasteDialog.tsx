@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,10 +38,17 @@ export default function MultiLinePasteDialog({
   onSendLineByLine,
 }: MultiLinePasteDialogProps) {
   const { t } = useTranslation();
+  const directPasteButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent
+        className="sm:max-w-xl"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          directPasteButtonRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t("terminal.multiLinePasteTitle")}</DialogTitle>
           <DialogDescription>
@@ -59,10 +67,12 @@ export default function MultiLinePasteDialog({
           <Button variant="outline" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button variant="secondary" onClick={onDirectPaste}>
+          <Button ref={directPasteButtonRef} onClick={onDirectPaste}>
             {t("terminal.multiLinePasteDirect")}
           </Button>
-          <Button onClick={onSendLineByLine}>{t("terminal.multiLinePasteSendLineByLine")}</Button>
+          <Button variant="secondary" onClick={onSendLineByLine}>
+            {t("terminal.multiLinePasteSendLineByLine")}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
