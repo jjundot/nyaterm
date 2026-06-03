@@ -108,6 +108,9 @@ export default function SavedConnections({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
+  const searchExpandedBaseRef = useRef<Set<string> | null>(null);
+  const searchAutoExpandedGroupIdsRef = useRef<Set<string>>(new Set());
+  const previousKeywordRef = useRef("");
   const lastSelectedConnectionIdRef = useRef<string | null>(null);
   const sortMode = (appSettings.ui.saved_connections_sort_mode || "default") as SortMode;
 
@@ -206,6 +209,56 @@ export default function SavedConnections({
 
     return { rootNodes: keyword ? roots.filter(prune) : roots, ungrouped: noGroup };
   }, [savedConnections, savedGroups, keyword, sortMode]);
+
+  useEffect(() => {
+    const previousKeyword = previousKeywordRef.current;
+
+    if (!keyword) {
+      if (previousKeyword && searchExpandedBaseRef.current) {
+        setExpandedGroups(searchExpandedBaseRef.current);
+      }
+      searchExpandedBaseRef.current = null;
+      searchAutoExpandedGroupIdsRef.current = new Set();
+      previousKeywordRef.current = "";
+      return;
+    }
+
+    if (!previousKeyword) {
+      searchExpandedBaseRef.current = new Set(expandedGroups);
+    }
+    if (previousKeyword !== keyword) {
+      searchAutoExpandedGroupIdsRef.current = new Set();
+    }
+    previousKeywordRef.current = keyword;
+
+    const matchingGroupIds = new Set<string>();
+    const appendNodeIds = (node: GroupNode) => {
+      matchingGroupIds.add(node.group.id);
+      node.children.forEach(appendNodeIds);
+    };
+    rootNodes.forEach(appendNodeIds);
+
+    const groupIdsToOpen = Array.from(matchingGroupIds).filter(
+      (id) => !searchAutoExpandedGroupIdsRef.current.has(id),
+    );
+    if (groupIdsToOpen.length === 0) return;
+
+    searchAutoExpandedGroupIdsRef.current = new Set([
+      ...searchAutoExpandedGroupIdsRef.current,
+      ...groupIdsToOpen,
+    ]);
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      groupIdsToOpen.forEach((id) => {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [keyword, rootNodes]);
 
   const visibleConnectionIds = useMemo(() => {
     const ids: string[] = [];

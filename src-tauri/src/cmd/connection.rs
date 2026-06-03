@@ -127,8 +127,11 @@ fn validate_proxy_jump_config(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_proxy_jump_config;
-    use crate::config::{AiExecutionProfile, ConnectionNetwork, ConnectionType, SavedConnection};
+    use super::{delete_group_from_config, validate_proxy_jump_config};
+    use crate::config::{
+        AiExecutionProfile, ConnectionNetwork, ConnectionType, Group, SavedConnection,
+        SessionsConfig,
+    };
 
     fn ssh_connection(id: &str, proxy_jump_id: Option<&str>) -> SavedConnection {
         SavedConnection {
@@ -181,6 +184,23 @@ mod tests {
         }
     }
 
+    fn group(id: &str, parent_id: Option<&str>) -> Group {
+        Group {
+            id: id.to_string(),
+            name: id.to_string(),
+            parent_id: parent_id.map(str::to_string),
+            sort_order: 0,
+            created_at_ms: None,
+            updated_at_ms: None,
+        }
+    }
+
+    fn grouped_connection(id: &str, group_id: Option<&str>) -> SavedConnection {
+        let mut connection = ssh_connection(id, None);
+        connection.group_id = group_id.map(str::to_string);
+        connection
+    }
+
     #[test]
     fn rejects_proxy_jump_on_non_ssh_connections() {
         let connection = telnet_connection("telnet-1", Some("jump-1"));
@@ -226,6 +246,42 @@ mod tests {
         let jump = ssh_connection("jump", None);
 
         validate_proxy_jump_config(&connection, &[jump]).unwrap();
+    }
+
+    #[test]
+    fn delete_group_removes_descendant_groups_and_contained_connections() {
+        let mut config = SessionsConfig {
+            groups: vec![
+                group("root", None),
+                group("child", Some("root")),
+                group("sibling", None),
+            ],
+            connections: vec![
+                grouped_connection("root-connection", Some("root")),
+                grouped_connection("child-connection", Some("child")),
+                grouped_connection("sibling-connection", Some("sibling")),
+                grouped_connection("ungrouped-connection", None),
+            ],
+        };
+
+        delete_group_from_config(&mut config, "root");
+
+        let group_ids = config
+            .groups
+            .iter()
+            .map(|group| group.id.as_str())
+            .collect::<Vec<_>>();
+        let connection_ids = config
+            .connections
+            .iter()
+            .map(|connection| connection.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(group_ids, vec!["sibling"]);
+        assert_eq!(
+            connection_ids,
+            vec!["sibling-connection", "ungrouped-connection"]
+        );
     }
 }
 
@@ -353,33 +409,34 @@ pub fn save_group(app: tauri::AppHandle, mut group: Group) -> AppResult<String> 
     Ok(target_id)
 }
 
-#[tauri::command]
-pub fn delete_group(app: tauri::AppHandle, id: String) -> AppResult<()> {
-    let mut cfg = config::load_config(&app)?;
-
-    // Collect the target group and all descendant groups
-    let mut ids_to_remove = vec![id.clone()];
+fn delete_group_from_config(cfg: &mut config::AppConfig, id: &str) {
+    // Collect the target group and all descendant groups.
+    let mut ids_to_remove = vec![id.to_string()];
     let mut i = 0;
     while i < ids_to_remove.len() {
         let parent = ids_to_remove[i].clone();
-        for g in &cfg.groups {
-            if g.parent_id.as_deref() == Some(&parent) && !ids_to_remove.contains(&g.id) {
-                ids_to_remove.push(g.id.clone());
+        for group in &cfg.groups {
+            if group.parent_id.as_deref() == Some(&parent) && !ids_to_remove.contains(&group.id) {
+                ids_to_remove.push(group.id.clone());
             }
         }
         i += 1;
     }
 
-    cfg.groups.retain(|g| !ids_to_remove.contains(&g.id));
+    cfg.groups
+        .retain(|group| !ids_to_remove.contains(&group.id));
+    cfg.connections.retain(|connection| {
+        connection
+            .group_id
+            .as_ref()
+            .is_none_or(|group_id| !ids_to_remove.contains(group_id))
+    });
+}
 
-    for conn in &mut cfg.connections {
-        if let Some(ref gid) = conn.group_id {
-            if ids_to_remove.contains(gid) {
-                conn.group_id = None;
-            }
-        }
-    }
-
+#[tauri::command]
+pub fn delete_group(app: tauri::AppHandle, id: String) -> AppResult<()> {
+    let mut cfg = config::load_config(&app)?;
+    delete_group_from_config(&mut cfg, &id);
     config::save_config(&app, &cfg)?;
     let _ = app.emit("connections-changed", ());
     schedule_cloud_sync_notify(app.clone());
