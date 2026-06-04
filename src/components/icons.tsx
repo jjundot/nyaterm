@@ -1,7 +1,7 @@
 import type { ElementType } from "react";
 import type { IconType } from "react-icons";
 import { DiBingSmall, DiYahooSmall } from "react-icons/di";
-import { FaAws, FaWindows } from "react-icons/fa";
+import { FaWindows } from "react-icons/fa";
 import {
   MdApps,
   MdArticle,
@@ -27,6 +27,7 @@ import {
 import {
   SiAlmalinux,
   SiAlpinelinux,
+  SiAmazonwebservices,
   SiAndroid,
   SiApple,
   SiArchlinux,
@@ -34,7 +35,7 @@ import {
   SiBilibili,
   SiCentos,
   SiClaude,
-  SiCss,
+  SiCss3,
   SiDebian,
   SiDocker,
   SiDuckduckgo,
@@ -103,7 +104,7 @@ export const QUICK_ICONS: Record<string, QuickIconDef> = {
   go: { icon: SiGo, color: "#00ADD8" },
   node: { icon: SiNodedotjs, color: "#339933" },
   php: { icon: SiPhp, color: "#777BB4" },
-  aws: { icon: FaAws, color: "#232F3E" },
+  aws: { icon: SiAmazonwebservices, color: "#232F3E" },
   gcp: { icon: SiGooglecloud, color: "#4285F4" },
 };
 
@@ -180,7 +181,7 @@ export function getFileIcon(entry: FileEntry): { icon: ElementType; color: strin
     case "css":
     case "scss":
     case "less":
-      return { icon: SiCss, color: "#38bdf8" }; // sky-400
+      return { icon: SiCss3, color: "#38bdf8" }; // sky-400
     case "py":
     case "pyc":
       return { icon: SiPython, color: "#3776AB" }; // python-500
