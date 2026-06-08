@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MdAdd, MdDelete, MdEdit, MdMoreHoriz, MdOpenInNew } from "react-icons/md";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,13 @@ import { cn } from "@/lib/utils";
 import type { SearchEngine } from "@/types/global";
 import { type QuickIconDef, SEARCH_ICONS } from "../icons";
 import { SettingSection } from "./SettingFormItems";
+
+let searchEngineListKeySeed = 0;
+
+function createSearchEngineListKey() {
+  searchEngineListKeySeed += 1;
+  return `search-engine-${searchEngineListKeySeed}`;
+}
 
 type SearchEngineListItemProps = {
   engine: SearchEngine;
@@ -210,6 +217,13 @@ export function SearchTab() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [pendingFocusIndex, setPendingFocusIndex] = useState<number | null>(null);
   const engineCount = appSettings.search.custom_engines.length;
+  const engineListKeysRef = useRef<string[]>([]);
+
+  if (engineListKeysRef.current.length !== engineCount) {
+    engineListKeysRef.current = appSettings.search.custom_engines.map(
+      (_, index) => engineListKeysRef.current[index] ?? createSearchEngineListKey(),
+    );
+  }
 
   useEffect(() => {
     if (pendingFocusIndex === null || engineCount === 0 || expandedIndex !== pendingFocusIndex) {
@@ -243,6 +257,7 @@ export function SearchTab() {
   function addEngine() {
     setExpandedIndex(0);
     setPendingFocusIndex(0);
+    engineListKeysRef.current = [createSearchEngineListKey(), ...engineListKeysRef.current];
     updateEngines([
       {
         name: "New Engine",
@@ -254,6 +269,9 @@ export function SearchTab() {
   }
 
   function removeEngine(index: number) {
+    engineListKeysRef.current = engineListKeysRef.current.filter(
+      (_, currentIndex) => currentIndex !== index,
+    );
     updateEngines(
       appSettings.search.custom_engines.filter((_, currentIndex) => currentIndex !== index),
     );
@@ -291,7 +309,7 @@ export function SearchTab() {
           <div className="overflow-hidden rounded-xl border border-border/70 bg-background/75 divide-y divide-border/60">
             {appSettings.search.custom_engines.map((engine, index) => (
               <SearchEngineListItem
-                key={`${engine.name}-${engine.url_template}-${index}`}
+                key={engineListKeysRef.current[index]}
                 engine={engine}
                 index={index}
                 isOpen={expandedIndex === index}
