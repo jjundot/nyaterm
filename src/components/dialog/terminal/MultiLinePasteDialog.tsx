@@ -32,7 +32,7 @@ export default function MultiLinePasteDialog({
   onSendLineByLine,
 }: MultiLinePasteDialogProps) {
   const { t } = useTranslation();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const directPasteButtonRef = useRef<HTMLButtonElement>(null);
   const [draftText, setDraftText] = useState(text ?? "");
   const canSend = draftText.length > 0;
   const stats = useMemo(
@@ -59,10 +59,7 @@ export default function MultiLinePasteDialog({
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           requestAnimationFrame(() => {
-            const textarea = textareaRef.current;
-            if (!textarea) return;
-            textarea.focus();
-            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+            directPasteButtonRef.current?.focus();
           });
         }}
         onCloseAutoFocus={(event) => {
@@ -74,7 +71,6 @@ export default function MultiLinePasteDialog({
           <DialogDescription>{stats}</DialogDescription>
         </DialogHeader>
         <Textarea
-          ref={textareaRef}
           className="max-h-72 min-h-32 resize-y overflow-auto font-mono text-xs leading-5 md:text-xs"
           value={draftText}
           onChange={(event) => setDraftText(event.target.value)}
@@ -84,7 +80,11 @@ export default function MultiLinePasteDialog({
           <Button variant="outline" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button disabled={!canSend} onClick={() => onDirectPaste(draftText)}>
+          <Button
+            ref={directPasteButtonRef}
+            disabled={!canSend}
+            onClick={() => onDirectPaste(draftText)}
+          >
             {t("terminal.multiLinePasteDirect")}
           </Button>
           <Button
