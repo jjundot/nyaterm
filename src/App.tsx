@@ -892,6 +892,24 @@ function App() {
     [closeTabs, closeWorkspaceTabSessions, persistWorkspaceNow, t],
   );
 
+  const handleCloseDisconnectedPane = useCallback(
+    async (tabId: string, paneId: string) => {
+      const tab = tabs.find((item) => item.id === tabId);
+      const pane = tab ? findSessionPaneById(tab.root, paneId) : null;
+      if (!tab || !pane) return;
+
+      const closed = await closePaneBackendSession(pane);
+      if (!closed) {
+        toast.error(t("tabCtx.closeFailed"));
+        return;
+      }
+
+      closePane(tab.id, pane.id);
+      await persistWorkspaceNow(t("tabCtx.closeFailed"));
+    },
+    [closePane, closePaneBackendSession, persistWorkspaceNow, t, tabs],
+  );
+
   const handleSessionClick = useCallback(
     (sessionId: string) => {
       const tab = findTabBySessionId(tabs, sessionId);
@@ -1985,6 +2003,7 @@ function App() {
           onUpdateWindowSplitRatio: handleUpdateWindowSplitRatio,
           onReconnectPane: handleReconnectPane,
           onReconnected: handleReconnected,
+          onDisconnectedCloseRequested: handleCloseDisconnectedPane,
         }}
         tabsCount={tabs.length}
         bottomPanel={{
