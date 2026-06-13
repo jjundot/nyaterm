@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import { type ComponentProps, type ReactNode, useEffect, useMemo, useState } from "react";
 import { MdClose, MdTerminal } from "react-icons/md";
+import PanelStack from "@/components/app/PanelStack";
 import AboutDialog from "@/components/dialog/app/AboutDialog";
 import LockScreen from "@/components/dialog/app/LockScreen";
 import QuitConfirmDialog from "@/components/dialog/app/QuitConfirmDialog";
@@ -51,6 +52,20 @@ interface AppLayoutProps {
   onLeftResize: (delta: number) => void;
   onRightResize: (delta: number) => void;
   panelContent: (panelId: string | null) => ReactNode;
+  /** Panels visible per side, ordered top-to-bottom (single id in single-open mode). */
+  leftPanelIds: string[];
+  rightPanelIds: string[];
+  /** Exclusive panel (e.g. AI assistant) shown alone instead of the stack (multi-open mode). */
+  leftOverlayPanelId: string | null;
+  rightOverlayPanelId: string | null;
+  panelStackSizes: Record<string, number>;
+  onPanelStackResize: (
+    side: "left" | "right",
+    aboveId: string,
+    belowId: string,
+    delta: number,
+    containerHeight: number,
+  ) => void;
   workspace: WorkspaceProps;
   tabsCount: number;
   emptyWorkspace: {
@@ -108,6 +123,12 @@ export default function AppLayout({
   onLeftResize,
   onRightResize,
   panelContent,
+  leftPanelIds,
+  rightPanelIds,
+  leftOverlayPanelId,
+  rightOverlayPanelId,
+  panelStackSizes,
+  onPanelStackResize,
   workspace,
   tabsCount,
   emptyWorkspace,
@@ -160,7 +181,10 @@ export default function AppLayout({
     leftActivityBar.items.length > 0 || (leftActivityBar.bottomItems?.length ?? 0) > 0;
   const hasRightActivityItems =
     rightActivityBar.items.length > 0 || (rightActivityBar.bottomItems?.length ?? 0) > 0;
-  const rightPanelOpen = hasRightActivityItems && Boolean(uiConfig.active_right_panel);
+  const leftPanelOpen =
+    hasLeftActivityItems && (leftPanelIds.length > 0 || Boolean(leftOverlayPanelId));
+  const rightPanelOpen =
+    hasRightActivityItems && (rightPanelIds.length > 0 || Boolean(rightOverlayPanelId));
   const leftMobileOpen = hasLeftActivityItems && mobile.leftOpen;
   const rightMobileOpen = hasRightActivityItems && mobile.rightOpen;
 
@@ -223,7 +247,7 @@ export default function AppLayout({
             />
           )}
 
-          {hasLeftActivityItems && uiConfig.active_left_panel && (
+          {leftPanelOpen && (
             <>
               <div
                 style={{ width: uiConfig.left_width, backgroundColor: "var(--df-bg-panel)" }}
@@ -256,7 +280,15 @@ export default function AppLayout({
                 )}
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  {panelContent(uiConfig.active_left_panel)}
+                  <PanelStack
+                    panelIds={leftPanelIds}
+                    overlayPanelId={leftOverlayPanelId}
+                    sizes={panelStackSizes}
+                    renderPanel={panelContent}
+                    onResizePair={(aboveId, belowId, delta, containerHeight) =>
+                      onPanelStackResize("left", aboveId, belowId, delta, containerHeight)
+                    }
+                  />
                 </div>
               </div>
               <ResizeHandle
@@ -382,7 +414,15 @@ export default function AppLayout({
                 )}
 
                 <div className="flex-1 min-h-0 overflow-hidden">
-                  {panelContent(uiConfig.active_right_panel)}
+                  <PanelStack
+                    panelIds={rightPanelIds}
+                    overlayPanelId={rightOverlayPanelId}
+                    sizes={panelStackSizes}
+                    renderPanel={panelContent}
+                    onResizePair={(aboveId, belowId, delta, containerHeight) =>
+                      onPanelStackResize("right", aboveId, belowId, delta, containerHeight)
+                    }
+                  />
                 </div>
               </aside>
             </>

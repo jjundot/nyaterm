@@ -191,6 +191,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     cursor_blink: true,
     ui_font_size: 16,
     terminal_theme: null,
+    panel_multi_open: false,
   },
   proxy: {
     enabled: false,
@@ -284,6 +285,9 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     quick_cmd_sort_mode: "created",
     active_left_panel: "fileExplorer",
     active_right_panel: "savedConnections",
+    left_open_panels: [],
+    right_open_panels: [],
+    panel_stack_sizes: {},
     show_quick_cmd_bar: true,
     show_serial_send_panel: false,
     serial_send_height: 180,
@@ -1097,9 +1101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   connectionId: cid,
                   createRequestId: pane.createRequestId,
                 })
-                  .then((sessionId) =>
-                    handleRestoredSessionCreated(tab.id, pane.id, sessionId),
-                  )
+                  .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId))
                   .catch((e) =>
                     handleRestoredSessionFailed(tab.id, pane.id, "SSH", pane.connectionId, e),
                   );
@@ -1109,9 +1111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   connectionId: cid || null,
                   createRequestId: pane.createRequestId,
                 })
-                  .then((sessionId) =>
-                    handleRestoredSessionCreated(tab.id, pane.id, sessionId),
-                  )
+                  .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId))
                   .catch((e) =>
                     handleRestoredSessionFailed(tab.id, pane.id, "Local", pane.connectionId, e),
                   );
@@ -1125,9 +1125,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   connectionId: cid,
                   createRequestId: pane.createRequestId,
                 })
-                  .then((sessionId) =>
-                    handleRestoredSessionCreated(tab.id, pane.id, sessionId),
-                  )
+                  .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId))
                   .catch((e) =>
                     handleRestoredSessionFailed(tab.id, pane.id, "Telnet", pane.connectionId, e),
                   );
@@ -1141,9 +1139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   connectionId: cid,
                   createRequestId: pane.createRequestId,
                 })
-                  .then((sessionId) =>
-                    handleRestoredSessionCreated(tab.id, pane.id, sessionId),
-                  )
+                  .then((sessionId) => handleRestoredSessionCreated(tab.id, pane.id, sessionId))
                   .catch((e) =>
                     handleRestoredSessionFailed(tab.id, pane.id, "Serial", pane.connectionId, e),
                   );

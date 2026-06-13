@@ -17,15 +17,143 @@ import {
 } from "react-icons/md";
 import { PiRecordFill } from "react-icons/pi";
 import type { ActivityBarItem } from "@/components/layout/ActivityBar";
-import { getItemSide } from "@/lib/appWorkspace";
+import { buildMultiPanelToggleUpdate, getItemSide } from "@/lib/appWorkspace";
 import { openSettings } from "@/lib/windowManager";
 import type { ActivityBarLayout, ActivityBarZone, UiConfig } from "@/types/global";
 
 type UpdateUi = (updates: Partial<UiConfig> | ((prev: UiConfig) => Partial<UiConfig>)) => void;
 
+const ACTIVITY_LAYOUT_ZONES = ["left_top", "left_bottom", "right_top", "right_bottom"] as const;
+
+function insertAfter(ids: string[], anchorId: string, itemId: string) {
+  if (ids.includes(itemId)) return ids;
+  const next = [...ids];
+  const anchorIndex = next.indexOf(anchorId);
+  if (anchorIndex === -1) {
+    next.unshift(itemId);
+  } else {
+    next.splice(anchorIndex + 1, 0, itemId);
+  }
+  return next;
+}
+
+function insertBeforeOrPush(ids: string[], anchorId: string, itemId: string) {
+  if (ids.includes(itemId)) return ids;
+  const next = [...ids];
+  const anchorIndex = next.indexOf(anchorId);
+  if (anchorIndex === -1) {
+    next.push(itemId);
+  } else {
+    next.splice(anchorIndex, 0, itemId);
+  }
+  return next;
+}
+
+function normalizeActivityBarState(uiConfig: UiConfig): Partial<UiConfig> | null {
+  const originalLeftOpenPanels = uiConfig.left_open_panels ?? [];
+  const originalRightOpenPanels = uiConfig.right_open_panels ?? [];
+  const seen = new Set<string>();
+  const layout: ActivityBarLayout = {
+    ...uiConfig.activity_bar_layout,
+    left_top: [],
+    left_bottom: [],
+    right_top: [],
+    right_bottom: [],
+  };
+
+  for (const zone of ACTIVITY_LAYOUT_ZONES) {
+    for (const id of uiConfig.activity_bar_layout[zone]) {
+      if (id === "fileTransfer") continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      layout[zone].push(id);
+    }
+  }
+
+  if (!seen.has("syncBackupHistory")) {
+    layout.left_bottom = insertBeforeOrPush(layout.left_bottom, "settings", "syncBackupHistory");
+    seen.add("syncBackupHistory");
+  }
+  if (!seen.has("aiAssistant")) {
+    layout.right_top = insertAfter(layout.right_top, "savedConnections", "aiAssistant");
+    seen.add("aiAssistant");
+  }
+
+  if (!seen.has("serialSend")) {
+    const quickCmdIndex = layout.right_bottom.indexOf("quickCmdBar");
+    const recordingIndex = layout.right_bottom.indexOf("recording");
+    const lockIndex = layout.right_bottom.indexOf("lock");
+    if (quickCmdIndex !== -1) {
+      layout.right_bottom.splice(quickCmdIndex + 1, 0, "serialSend");
+    } else if (recordingIndex !== -1) {
+      layout.right_bottom.splice(recordingIndex, 0, "serialSend");
+    } else if (lockIndex !== -1) {
+      layout.right_bottom.splice(lockIndex, 0, "serialSend");
+    } else {
+      layout.right_bottom.push("serialSend");
+    }
+    seen.add("serialSend");
+  }
+
+  if (!seen.has("recording")) {
+    layout.right_bottom = insertBeforeOrPush(layout.right_bottom, "lock", "recording");
+    seen.add("recording");
+  }
+
+  const leftPanelIds = new Set([...layout.left_top, ...layout.left_bottom]);
+  const rightPanelIds = new Set([...layout.right_top, ...layout.right_bottom]);
+  const leftOpenPanels = [...new Set(originalLeftOpenPanels)].filter((id) => leftPanelIds.has(id));
+  const rightOpenPanels = [...new Set(originalRightOpenPanels)].filter((id) =>
+    rightPanelIds.has(id),
+  );
+  const activeLeftPanel =
+    uiConfig.active_left_panel && leftPanelIds.has(uiConfig.active_left_panel)
+      ? uiConfig.active_left_panel
+      : uiConfig.active_left_panel === "fileTransfer" && leftPanelIds.has("fileExplorer")
+        ? "fileExplorer"
+        : null;
+  const activeRightPanel =
+    uiConfig.active_right_panel && rightPanelIds.has(uiConfig.active_right_panel)
+      ? uiConfig.active_right_panel
+      : null;
+
+  const layoutChanged = ACTIVITY_LAYOUT_ZONES.some(
+    (zone) =>
+      layout[zone].length !== uiConfig.activity_bar_layout[zone].length ||
+      layout[zone].some((id, index) => id !== uiConfig.activity_bar_layout[zone][index]),
+  );
+  const leftOpenChanged =
+    leftOpenPanels.length !== originalLeftOpenPanels.length ||
+    leftOpenPanels.some((id, index) => id !== originalLeftOpenPanels[index]);
+  const rightOpenChanged =
+    rightOpenPanels.length !== originalRightOpenPanels.length ||
+    rightOpenPanels.some((id, index) => id !== originalRightOpenPanels[index]);
+  const activeLeftChanged = activeLeftPanel !== uiConfig.active_left_panel;
+  const activeRightChanged = activeRightPanel !== uiConfig.active_right_panel;
+
+  if (
+    !layoutChanged &&
+    !leftOpenChanged &&
+    !rightOpenChanged &&
+    !activeLeftChanged &&
+    !activeRightChanged
+  ) {
+    return null;
+  }
+
+  return {
+    ...(layoutChanged ? { activity_bar_layout: layout } : {}),
+    ...(leftOpenChanged ? { left_open_panels: leftOpenPanels } : {}),
+    ...(rightOpenChanged ? { right_open_panels: rightOpenPanels } : {}),
+    ...(activeLeftChanged ? { active_left_panel: activeLeftPanel } : {}),
+    ...(activeRightChanged ? { active_right_panel: activeRightPanel } : {}),
+  };
+}
+
 interface UseActivityBarControllerOptions {
   uiConfig: UiConfig;
   recordingSessions: Set<string>;
+  multiPanelOpen: boolean;
   updateUi: UpdateUi;
   setIsLocked: (locked: boolean) => void;
   t: TFunction;
@@ -34,6 +162,7 @@ interface UseActivityBarControllerOptions {
 export function useActivityBarController({
   uiConfig,
   recordingSessions,
+  multiPanelOpen,
   updateUi,
   setIsLocked,
   t,
@@ -53,11 +182,7 @@ export function useActivityBarController({
       quickCmdBar: { icon: <MdBolt />, tooltip: t("panel.quickCommands") },
       serialSend: { icon: <MdSend />, tooltip: t("panel.serialSend", "Command Send") },
       recording: {
-        icon: (
-          <PiRecordFill
-            className={recordingSessions.size > 0 ? "animate-pulse" : undefined}
-          />
-        ),
+        icon: <PiRecordFill className={recordingSessions.size > 0 ? "animate-pulse" : undefined} />,
         tooltip: t("recording.panelTitle"),
       },
       lock: { icon: <MdLock />, tooltip: t("statusBar.lock") },
@@ -68,78 +193,11 @@ export function useActivityBarController({
   const layout = uiConfig.activity_bar_layout;
 
   useEffect(() => {
-    const allIds = [
-      ...layout.left_top,
-      ...layout.left_bottom,
-      ...layout.right_top,
-      ...layout.right_bottom,
-    ];
-    const needsSyncBackupHistory = !allIds.includes("syncBackupHistory");
-    const needsAiAssistant = !allIds.includes("aiAssistant");
-    const needsSerialSend = !allIds.includes("serialSend");
-    const needsRecording = !allIds.includes("recording");
-    if (!needsSyncBackupHistory && !needsAiAssistant && !needsSerialSend && !needsRecording) return;
-
+    if (!normalizeActivityBarState(uiConfig)) return;
     updateUi((prev) => {
-      const nextLeftBottom = [...prev.activity_bar_layout.left_bottom];
-      const nextRightTop = [...prev.activity_bar_layout.right_top];
-      const nextRightBottom = [...prev.activity_bar_layout.right_bottom];
-
-      if (!nextLeftBottom.includes("syncBackupHistory")) {
-        const settingsIndex = nextLeftBottom.indexOf("settings");
-        if (settingsIndex !== -1) {
-          nextLeftBottom.splice(settingsIndex, 0, "syncBackupHistory");
-        } else {
-          nextLeftBottom.push("syncBackupHistory");
-        }
-      }
-
-      if (!nextRightTop.includes("aiAssistant")) {
-        const savedConnectionsIndex = nextRightTop.indexOf("savedConnections");
-        if (savedConnectionsIndex !== -1) {
-          nextRightTop.splice(savedConnectionsIndex + 1, 0, "aiAssistant");
-        } else {
-          nextRightTop.unshift("aiAssistant");
-        }
-      }
-
-      if (!nextRightBottom.includes("serialSend")) {
-        const quickCmdIndex = nextRightBottom.indexOf("quickCmdBar");
-        const recordingIndex = nextRightBottom.indexOf("recording");
-        const lockIndex = nextRightBottom.indexOf("lock");
-        if (quickCmdIndex !== -1) {
-          nextRightBottom.splice(quickCmdIndex + 1, 0, "serialSend");
-        } else if (recordingIndex !== -1) {
-          nextRightBottom.splice(recordingIndex, 0, "serialSend");
-        } else if (lockIndex !== -1) {
-          nextRightBottom.splice(lockIndex, 0, "serialSend");
-        } else {
-          nextRightBottom.push("serialSend");
-        }
-      }
-
-      if (!nextRightBottom.includes("recording")) {
-        const serialSendIndex = nextRightBottom.indexOf("serialSend");
-        const lockIndex = nextRightBottom.indexOf("lock");
-        if (serialSendIndex !== -1) {
-          nextRightBottom.splice(serialSendIndex + 1, 0, "recording");
-        } else if (lockIndex !== -1) {
-          nextRightBottom.splice(lockIndex, 0, "recording");
-        } else {
-          nextRightBottom.push("recording");
-        }
-      }
-
-      return {
-        activity_bar_layout: {
-          ...prev.activity_bar_layout,
-          left_bottom: nextLeftBottom,
-          right_top: nextRightTop,
-          right_bottom: nextRightBottom,
-        },
-      };
+      return normalizeActivityBarState(prev) ?? {};
     });
-  }, [layout.left_bottom, layout.left_top, layout.right_bottom, layout.right_top, updateUi]);
+  }, [uiConfig, updateUi]);
 
   const buildItems = useCallback(
     (ids: string[]): ActivityBarItem[] =>
@@ -196,13 +254,18 @@ export function useActivityBarController({
         return;
       }
       const side = getItemSide(id, layout);
+      if (!side) return;
+      if (multiPanelOpen) {
+        updateUi((prev) => buildMultiPanelToggleUpdate(prev, id, side));
+        return;
+      }
       if (side === "left") {
         updateUi((prev) => ({ active_left_panel: prev.active_left_panel === id ? null : id }));
       } else if (side === "right") {
         updateUi((prev) => ({ active_right_panel: prev.active_right_panel === id ? null : id }));
       }
     },
-    [layout, setIsLocked, updateUi],
+    [layout, multiPanelOpen, setIsLocked, updateUi],
   );
 
   const handleReorder = useCallback(
@@ -233,6 +296,12 @@ export function useActivityBarController({
             : {}),
           ...(prev.active_right_panel === itemId && isMovingToLeft
             ? { active_right_panel: null }
+            : {}),
+          ...(isMovingToRight && prev.left_open_panels?.includes(itemId)
+            ? { left_open_panels: prev.left_open_panels.filter((id) => id !== itemId) }
+            : {}),
+          ...(isMovingToLeft && prev.right_open_panels?.includes(itemId)
+            ? { right_open_panels: prev.right_open_panels.filter((id) => id !== itemId) }
             : {}),
         };
       });

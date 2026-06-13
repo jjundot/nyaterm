@@ -511,6 +511,13 @@ export function AppearanceTab() {
             </SelectItem>
           ))}
         </SettingSelect>
+
+        <SettingRow label={t("settings.panelMultiOpen")} desc={t("settings.panelMultiOpenDesc")}>
+          <SettingSwitch
+            checked={appearance.panel_multi_open}
+            onChange={(v) => updateAppearance({ panel_multi_open: v })}
+          />
+        </SettingRow>
       </SettingSection>
 
       <BackgroundImageSection appearance={appearance} onChange={updateAppearance} />

@@ -309,6 +309,12 @@ export interface UiConfig {
   active_left_panel: string | null;
   /** ID of whichever panel is currently open on the right side. */
   active_right_panel: string | null;
+  /** Panels currently open on the left side when multi-open panels are enabled. */
+  left_open_panels: string[];
+  /** Panels currently open on the right side when multi-open panels are enabled. */
+  right_open_panels: string[];
+  /** Relative height weight per panel id for stacked multi-open panels. */
+  panel_stack_sizes: Record<string, number>;
   show_quick_cmd_bar: boolean;
   show_serial_send_panel: boolean;
   serial_send_height: number;
@@ -447,6 +453,8 @@ export interface AppearanceSettings {
   cursor_blink: boolean;
   ui_font_size: number;
   terminal_theme: string | null;
+  /** Allow opening multiple side panels at once, stacked vertically. */
+  panel_multi_open: boolean;
 }
 
 export interface ProxySettings {

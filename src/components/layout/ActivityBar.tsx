@@ -94,6 +94,8 @@ interface ActivityBarProps {
   items: ActivityBarItem[];
   bottomItems?: ActivityBarItem[];
   activeId: string | null;
+  /** Additional active panel ids (multi-open panel mode). */
+  activeIds?: Set<string>;
   activeBottomIds?: Set<string>;
   onSelect: (id: string) => void;
   onReorder: (zone: "top" | "bottom", orderedIds: string[]) => void;
@@ -108,6 +110,7 @@ export default function ActivityBar({
   items,
   bottomItems,
   activeId,
+  activeIds,
   activeBottomIds,
   onSelect,
   onReorder,
@@ -136,6 +139,7 @@ export default function ActivityBar({
           zoneKey="top"
           zoneName={zone.top}
           activeId={activeId}
+          activeIds={activeIds}
           onSelect={onSelect}
           onReorder={onReorder}
           onMoveItem={onMoveItem}
@@ -151,6 +155,7 @@ export default function ActivityBar({
             zoneKey="bottom"
             zoneName={zone.bottom}
             activeId={activeId}
+            activeIds={activeIds}
             activeBottomIds={activeBottomIds}
             onSelect={onSelect}
             onReorder={onReorder}
@@ -172,6 +177,7 @@ interface DropZoneProps {
   zoneKey: "top" | "bottom";
   zoneName: ActivityBarZone;
   activeId: string | null;
+  activeIds?: Set<string>;
   activeBottomIds?: Set<string>;
   onSelect: (id: string) => void;
   onReorder: (zone: "top" | "bottom", orderedIds: string[]) => void;
@@ -188,6 +194,7 @@ function DropZone({
   zoneKey,
   zoneName,
   activeId,
+  activeIds,
   activeBottomIds,
   onSelect,
   onReorder,
@@ -376,7 +383,9 @@ function DropZone({
         <ActivityBarButton
           key={item.id}
           item={item}
-          active={activeId === item.id || !!activeBottomIds?.has(item.id)}
+          active={
+            activeId === item.id || !!activeIds?.has(item.id) || !!activeBottomIds?.has(item.id)
+          }
           showLabel={showLabels}
           onSelect={onSelect}
           indicatorSide={indicatorSide}

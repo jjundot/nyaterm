@@ -205,6 +205,12 @@ pub struct UiConfig {
     pub active_left_panel: Option<String>,
     #[serde(default = "default_active_right_panel")]
     pub active_right_panel: Option<String>,
+    #[serde(default)]
+    pub left_open_panels: Vec<String>,
+    #[serde(default)]
+    pub right_open_panels: Vec<String>,
+    #[serde(default)]
+    pub panel_stack_sizes: HashMap<String, f64>,
     #[serde(default = "default_true_fn")]
     pub show_quick_cmd_bar: bool,
     #[serde(default = "default_false")]
@@ -300,6 +306,9 @@ impl Default for UiConfig {
             quick_cmd_sort_mode: default_quick_cmd_sort_mode(),
             active_left_panel: default_active_left_panel(),
             active_right_panel: default_active_right_panel(),
+            left_open_panels: vec![],
+            right_open_panels: vec![],
+            panel_stack_sizes: HashMap::new(),
             show_quick_cmd_bar: true,
             show_serial_send_panel: false,
             serial_send_height: default_serial_send_height(),

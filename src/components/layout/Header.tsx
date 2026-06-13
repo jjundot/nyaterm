@@ -56,7 +56,7 @@ import {
 import { getActivePane, getTabDisplayName } from "@/lib/workspaceTabs";
 import type { SavedConnection, Tab } from "@/types/global";
 import ImportDialog from "../dialog/connections/ImportDialog";
-import { SYSTEM_ICONS } from "../icons";
+import { resolveConnectionIcon } from "../icons";
 import NyaTermLogo from "../NyaTermLogo";
 import {
   Menubar,
@@ -524,11 +524,15 @@ export default function Header({
           {activeTab && activePane ? (
             activePane.type === "SSH" && activeConnection && !activeTab.customName ? (
               <>
-                {activeConnection.icon && SYSTEM_ICONS[activeConnection.icon] && (
-                  <span className="text-sm shrink-0">
-                    {SYSTEM_ICONS[activeConnection.icon].icon({ className: "text-sm shrink-0" })}
-                  </span>
-                )}
+                {(() => {
+                  const def = resolveConnectionIcon(activeConnection.icon);
+                  const IconComp = def.icon;
+                  return (
+                    <span className="text-sm shrink-0">
+                      <IconComp className="text-sm shrink-0" style={{ color: def.color }} />
+                    </span>
+                  );
+                })()}
                 <span className="text-xs font-medium truncate">
                   {activeConnection.name} — {activeConnection.username}@{activeConnection.host}:
                   {activeConnection.port}

@@ -21,9 +21,12 @@ import { useTerminalZoom } from "./hooks/useTerminalZoom";
 import { useUnreadTabs } from "./hooks/useUnreadTabs";
 import { AI_OPEN_EVENT, type AIOpenIntent } from "./lib/aiEvents";
 import {
+  buildPanelOpenUpdate,
   canCreateSessionFromPane,
   collectActiveNonSerialSessionIds,
-  getItemSide,
+  EXCLUSIVE_PANEL_IDS,
+  getSideOpenPanels,
+  getSideOverlayPanel,
   hasLiveSession,
   isNonSerialSessionType,
   NON_PANEL_IDS,
@@ -200,6 +203,7 @@ function App() {
     runtimeInfoLoaded,
   } = useApp();
   const uiConfig = appSettings.ui;
+  const multiPanelOpen = appSettings.appearance.panel_multi_open;
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
@@ -313,21 +317,9 @@ function App() {
 
   const handleOpenPanel = useCallback(
     (panelId: "activeSessions" | "syncBackupHistory") => {
-      updateUi((prev) => {
-        const side = getItemSide(panelId, prev.activity_bar_layout);
-        if (side === "right") {
-          return {
-            active_right_panel: panelId,
-            ...(prev.active_left_panel === panelId ? { active_left_panel: null } : {}),
-          };
-        }
-        return {
-          active_left_panel: panelId,
-          ...(prev.active_right_panel === panelId ? { active_right_panel: null } : {}),
-        };
-      });
+      updateUi((prev) => buildPanelOpenUpdate(prev, panelId, multiPanelOpen));
     },
-    [updateUi],
+    [multiPanelOpen, updateUi],
   );
 
   // Cross-window event listeners
@@ -640,11 +632,11 @@ function App() {
       const detail = (event as CustomEvent<AIOpenIntent>).detail;
       if (!detail) return;
       setAiIntent(detail);
-      updateUi({ active_right_panel: "aiAssistant" });
+      updateUi((prev) => buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"));
     };
     window.addEventListener(AI_OPEN_EVENT, handler);
     return () => window.removeEventListener(AI_OPEN_EVENT, handler);
-  }, [updateUi]);
+  }, [multiPanelOpen, updateUi]);
 
   const unreadTabIds = useUnreadTabs(tabs, activeTabId);
 
@@ -1042,6 +1034,19 @@ function App() {
 
   const handleToggleLeftSidebar = useCallback(() => {
     updateUi((prev) => {
+      if (multiPanelOpen) {
+        if ((prev.left_open_panels?.length ?? 0) > 0 || prev.active_left_panel) {
+          return { left_open_panels: [], active_left_panel: null };
+        }
+        const first = [
+          ...prev.activity_bar_layout.left_top,
+          ...prev.activity_bar_layout.left_bottom,
+        ].find((id) => !NON_PANEL_IDS.has(id));
+        if (!first) return {};
+        return EXCLUSIVE_PANEL_IDS.has(first)
+          ? { active_left_panel: first }
+          : { left_open_panels: [first], active_left_panel: first };
+      }
       if (prev.active_left_panel) return { active_left_panel: null };
       const first = [
         ...prev.activity_bar_layout.left_top,
@@ -1049,10 +1054,23 @@ function App() {
       ].find((id) => !NON_PANEL_IDS.has(id));
       return { active_left_panel: first ?? null };
     });
-  }, [updateUi]);
+  }, [multiPanelOpen, updateUi]);
 
   const handleToggleRightSidebar = useCallback(() => {
     updateUi((prev) => {
+      if (multiPanelOpen) {
+        if ((prev.right_open_panels?.length ?? 0) > 0 || prev.active_right_panel) {
+          return { right_open_panels: [], active_right_panel: null };
+        }
+        const first = [
+          ...prev.activity_bar_layout.right_top,
+          ...prev.activity_bar_layout.right_bottom,
+        ].find((id) => !NON_PANEL_IDS.has(id));
+        if (!first) return {};
+        return EXCLUSIVE_PANEL_IDS.has(first)
+          ? { active_right_panel: first }
+          : { right_open_panels: [first], active_right_panel: first };
+      }
       if (prev.active_right_panel) return { active_right_panel: null };
       const first = [
         ...prev.activity_bar_layout.right_top,
@@ -1060,7 +1078,7 @@ function App() {
       ].find((id) => !NON_PANEL_IDS.has(id));
       return { active_right_panel: first ?? null };
     });
-  }, [updateUi]);
+  }, [multiPanelOpen, updateUi]);
 
   const { handleZoomIn, handleZoomOut, handleResetZoom } = useTerminalZoom(updateAppSettings);
 
@@ -1687,9 +1705,9 @@ function App() {
 
   const handleOpenChat = useCallback(() => {
     if (!isLocked) {
-      updateUi({ active_right_panel: "aiAssistant" });
+      updateUi((prev) => buildPanelOpenUpdate(prev, "aiAssistant", multiPanelOpen, "right"));
     }
-  }, [isLocked, updateUi]);
+  }, [isLocked, multiPanelOpen, updateUi]);
 
   const handleShowAllCommands = useCallback(() => {
     if (!isLocked) {
@@ -1881,6 +1899,7 @@ function App() {
   } = useActivityBarController({
     uiConfig,
     recordingSessions,
+    multiPanelOpen,
     updateUi,
     setIsLocked,
     t,
@@ -2016,6 +2035,82 @@ function App() {
     [updateUi],
   );
 
+  const leftPanelIds = useMemo(
+    () => getSideOpenPanels(uiConfig, "left", multiPanelOpen),
+    [multiPanelOpen, uiConfig],
+  );
+  const rightPanelIds = useMemo(
+    () => getSideOpenPanels(uiConfig, "right", multiPanelOpen),
+    [multiPanelOpen, uiConfig],
+  );
+  const leftOverlayPanelId = useMemo(
+    () => getSideOverlayPanel(uiConfig, "left", multiPanelOpen),
+    [multiPanelOpen, uiConfig],
+  );
+  const rightOverlayPanelId = useMemo(
+    () => getSideOverlayPanel(uiConfig, "right", multiPanelOpen),
+    [multiPanelOpen, uiConfig],
+  );
+  const leftActiveIds = useMemo(
+    () => (multiPanelOpen ? new Set(leftPanelIds) : undefined),
+    [leftPanelIds, multiPanelOpen],
+  );
+  const rightActiveIds = useMemo(
+    () => (multiPanelOpen ? new Set(rightPanelIds) : undefined),
+    [multiPanelOpen, rightPanelIds],
+  );
+
+  // When multi-open mode is first enabled, seed the stacks from the active panels.
+  useEffect(() => {
+    if (!settingsLoaded || !multiPanelOpen) return;
+    updateUi((prev) => ({
+      ...((prev.left_open_panels?.length ?? 0) === 0 &&
+      prev.active_left_panel &&
+      !EXCLUSIVE_PANEL_IDS.has(prev.active_left_panel)
+        ? { left_open_panels: [prev.active_left_panel] }
+        : {}),
+      ...((prev.right_open_panels?.length ?? 0) === 0 &&
+      prev.active_right_panel &&
+      !EXCLUSIVE_PANEL_IDS.has(prev.active_right_panel)
+        ? { right_open_panels: [prev.active_right_panel] }
+        : {}),
+    }));
+  }, [multiPanelOpen, settingsLoaded, updateUi]);
+
+  const handlePanelStackResize = useCallback(
+    (
+      side: "left" | "right",
+      aboveId: string,
+      belowId: string,
+      delta: number,
+      containerHeight: number,
+    ) => {
+      updateUi((prev) => {
+        const openIds = getSideOpenPanels(prev, side, true);
+        const sizes = prev.panel_stack_sizes ?? {};
+        const totalWeight = openIds.reduce((sum, id) => sum + (sizes[id] ?? 1), 0);
+        if (containerHeight <= 0 || totalWeight <= 0 || delta === 0) return {};
+        const pxPerWeight = containerHeight / totalWeight;
+        const aboveWeight = sizes[aboveId] ?? 1;
+        const belowWeight = sizes[belowId] ?? 1;
+        const pairWeight = aboveWeight + belowWeight;
+        const minWeight = Math.min(pairWeight / 2, 48 / pxPerWeight);
+        const nextAbove = Math.max(
+          minWeight,
+          Math.min(pairWeight - minWeight, aboveWeight + delta / pxPerWeight),
+        );
+        return {
+          panel_stack_sizes: {
+            ...sizes,
+            [aboveId]: nextAbove,
+            [belowId]: pairWeight - nextAbove,
+          },
+        };
+      });
+    },
+    [updateUi],
+  );
+
   const renderPanelContent = useCallback(
     (panelId: string | null) => (
       <AppPanelContent
@@ -2093,6 +2188,7 @@ function App() {
           items: leftTopItems,
           bottomItems: leftBottomItems,
           activeId: uiConfig.active_left_panel,
+          activeIds: leftActiveIds,
           activeBottomIds: toggleActiveIds,
           onSelect: handleItemSelect,
           onReorder: (zoneKey, ids) => handleReorder("left", zoneKey, ids),
@@ -2104,6 +2200,7 @@ function App() {
           items: rightTopItems,
           bottomItems: rightBottomItems,
           activeId: uiConfig.active_right_panel,
+          activeIds: rightActiveIds,
           activeBottomIds: toggleActiveIds,
           onSelect: handleItemSelect,
           onReorder: (zoneKey, ids) => handleReorder("right", zoneKey, ids),
@@ -2114,6 +2211,12 @@ function App() {
         onLeftResize={handleLeftResize}
         onRightResize={handleRightResize}
         panelContent={renderPanelContent}
+        leftPanelIds={leftPanelIds}
+        rightPanelIds={rightPanelIds}
+        leftOverlayPanelId={leftOverlayPanelId}
+        rightOverlayPanelId={rightOverlayPanelId}
+        panelStackSizes={uiConfig.panel_stack_sizes ?? {}}
+        onPanelStackResize={handlePanelStackResize}
         workspace={{
           layout: terminalWindows,
           tabsById,

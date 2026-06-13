@@ -32,6 +32,8 @@ pub struct AppearanceSettings {
     pub ui_font_size: f64,
     #[serde(default)]
     pub terminal_theme: Option<String>,
+    #[serde(default = "default_false")]
+    pub panel_multi_open: bool,
 }
 
 fn default_app_theme() -> String {
@@ -78,6 +80,7 @@ impl Default for AppearanceSettings {
             cursor_blink: true,
             ui_font_size: default_ui_font_size(),
             terminal_theme: None,
+            panel_multi_open: false,
         }
     }
 }
