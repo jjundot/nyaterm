@@ -141,6 +141,7 @@ pub fn run() {
             cmd::sftp::list_remote_dir,
             cmd::sftp::delete_remote_file,
             cmd::sftp::rename_remote_file,
+            cmd::sftp::sanitize_download_file_name,
             cmd::sftp::download_remote_file,
             cmd::sftp::upload_local_file,
             cmd::sftp::get_file_properties,

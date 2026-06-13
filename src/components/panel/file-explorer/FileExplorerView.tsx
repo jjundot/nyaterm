@@ -1404,6 +1404,9 @@ function FileExplorer({
     return downloadDir();
   };
 
+  const sanitizeDownloadFileName = async (name: string): Promise<string> =>
+    invoke<string>("sanitize_download_file_name", { name });
+
   const downloadEntries = async (entries: FileEntry[]) => {
     if (!activeSessionId || entries.length === 0) return;
 
@@ -1419,10 +1422,11 @@ function FileExplorer({
 
       if (askEach) {
         for (const entry of entries) {
+          const safeName = await sanitizeDownloadFileName(entry.name);
           if (entry.is_dir) {
             const localDir = await openDialog({ directory: true });
             if (!localDir || typeof localDir !== "string") continue;
-            const localPath = await join(localDir, entry.name);
+            const localPath = await join(localDir, safeName);
             downloads.push({
               sessionId: activeSessionId,
               fileName: entry.name,
@@ -1431,7 +1435,7 @@ function FileExplorer({
               kind: "directory",
             });
           } else {
-            const localPath = await saveDialog({ defaultPath: entry.name });
+            const localPath = await saveDialog({ defaultPath: safeName });
             if (!localPath) continue;
             downloads.push({
               sessionId: activeSessionId,
@@ -1449,7 +1453,8 @@ function FileExplorer({
       const defaultDir = await resolveDownloadDir();
 
       for (const entry of entries) {
-        const localPath = await join(defaultDir, entry.name);
+        const safeName = await sanitizeDownloadFileName(entry.name);
+        const localPath = await join(defaultDir, safeName);
         downloads.push({
           sessionId: activeSessionId,
           fileName: entry.name,
@@ -1542,7 +1547,8 @@ function FileExplorer({
     try {
       const tDir = await tempDir();
       const downloadTimestamp = Date.now().toString();
-      localPath = await join(tDir, "nyaterm", activeSessionId, downloadTimestamp, entry.name);
+      const safeName = await sanitizeDownloadFileName(entry.name);
+      localPath = await join(tDir, "nyaterm", activeSessionId, downloadTimestamp, safeName);
       await invoke("download_remote_file", {
         sessionId: activeSessionId,
         remotePath: getEntryFullPath(entry),

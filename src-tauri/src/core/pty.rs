@@ -805,6 +805,7 @@ mod tests {
         build_local_startup_script_for_platform, parse_shell_args, resolve_shell_command,
         should_emit_visible_output,
     };
+    use crate::core::ssh::osc::build_ready_marker;
     #[cfg(target_os = "macos")]
     use portable_pty::CommandBuilder;
 
