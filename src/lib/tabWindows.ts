@@ -438,3 +438,47 @@ export function reconcileTerminalWindows(
 
   return next;
 }
+
+export type SplitEdgeDirection = "left" | "right" | "top" | "bottom";
+
+export function splitLeafWithTab(
+  node: TerminalWindowNode,
+  tabId: string,
+  targetLeafId: string,
+  direction: SplitEdgeDirection,
+): TerminalWindowNode | null {
+  const sourceLeaf = findTerminalWindowLeafByTabId(node, tabId);
+  if (!sourceLeaf) return node;
+
+  const targetLeaf = findTerminalWindowLeafById(node, targetLeafId);
+  if (!targetLeaf) return node;
+
+  // Remove tab from source leaf
+  let next: TerminalWindowNode | null = removeTabFromTerminalWindows(node, tabId);
+  if (!next) return null;
+
+  // Create a new leaf with just the dragged tab
+  const newLeaf = createTerminalWindowLeaf([tabId], tabId);
+
+  // Determine split direction and order based on edge direction
+  const splitDirection: PaneSplitDirection =
+    direction === "left" || direction === "right" ? "vertical" : "horizontal";
+
+  const firstNode = direction === "left" || direction === "top" ? newLeaf : null;
+  const secondNode = direction === "right" || direction === "bottom" ? newLeaf : null;
+
+  // Replace the target leaf with a split containing the target leaf and new leaf
+  next = updateLeafById(next, targetLeafId, (leaf) => {
+    const split: TerminalWindowSplit = {
+      id: createTerminalWindowId("window-split"),
+      kind: "split",
+      direction: splitDirection,
+      ratio: 0.5,
+      first: firstNode || normalizeLeaf(leaf),
+      second: secondNode || normalizeLeaf(leaf),
+    };
+    return split;
+  });
+
+  return next;
+}

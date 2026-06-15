@@ -252,10 +252,7 @@ export default function TabContextMenu({
             {t("tabCtx.reconnect")}
           </ContextMenuItem>
 
-          <ContextMenuItem
-            disabled={!canDisconnect}
-            onClick={() => void onDisconnectSession(tab)}
-          >
+          <ContextMenuItem disabled={!canDisconnect} onClick={() => void onDisconnectSession(tab)}>
             <MdLinkOff className={iconClass} />
             {t("tabCtx.disconnect")}
           </ContextMenuItem>

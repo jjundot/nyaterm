@@ -1619,14 +1619,18 @@ export default function XTerminal({
 
   useEffect(() => {
     if (terminalReady && fitAddonRef.current && terminalRef.current) {
+      // Use double requestAnimationFrame to ensure DOM layout is fully stable
       requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-        if (showGutter && performanceMode !== "overloaded") {
-          window.dispatchEvent(
-            new CustomEvent("nyaterm:refresh-gutter", { detail: { sessionId } }),
-          );
-        }
+        requestAnimationFrame(() => {
+          if (!fitAddonRef.current || !terminalRef.current) return;
+          fitAddonRef.current?.fit();
+          terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
+          if (showGutter && performanceMode !== "overloaded") {
+            window.dispatchEvent(
+              new CustomEvent("nyaterm:refresh-gutter", { detail: { sessionId } }),
+            );
+          }
+        });
       });
     }
   }, [performanceMode, sessionId, showGutter, terminalReady]);
@@ -1634,13 +1638,17 @@ export default function XTerminal({
   // Re-fit and focus when tab becomes active
   useEffect(() => {
     if (active && visible && terminalReady && fitAddonRef.current && terminalRef.current) {
+      // Use double requestAnimationFrame to ensure DOM layout is fully stable
       requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        const terminal = terminalRef.current;
-        if (!terminal) return;
-        terminal.clearTextureAtlas();
-        terminal.refresh(0, Math.max(0, terminal.rows - 1));
-        terminal.focus();
+        requestAnimationFrame(() => {
+          if (!fitAddonRef.current || !terminalRef.current) return;
+          fitAddonRef.current?.fit();
+          const terminal = terminalRef.current;
+          if (!terminal) return;
+          terminal.clearTextureAtlas();
+          terminal.refresh(0, Math.max(0, terminal.rows - 1));
+          terminal.focus();
+        });
       });
     }
   }, [active, terminalReady, visible]);
@@ -1649,12 +1657,17 @@ export default function XTerminal({
     const handleRefresh = () => {
       if (!visible || !fitAddonRef.current || !terminalRef.current) return;
 
+      // Use double requestAnimationFrame to ensure DOM layout is fully stable
+      // after split operations before fitting the terminal
       requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-        terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
-        if (active) {
-          terminalRef.current?.focus();
-        }
+        requestAnimationFrame(() => {
+          if (!fitAddonRef.current || !terminalRef.current) return;
+          fitAddonRef.current?.fit();
+          terminalRef.current?.refresh(0, Math.max(0, terminalRef.current.rows - 1));
+          if (active) {
+            terminalRef.current?.focus();
+          }
+        });
       });
     };
 
@@ -1700,20 +1713,23 @@ export default function XTerminal({
     });
   }, []);
 
-  const handleSendMultiLinePasteByLine = useCallback((text: string) => {
-    if (!text) return;
-    openSendCommandPanel({
-      text,
-      sourceSessionId: sessionId,
-      sourceSessionType: sessionType,
-      dataType: "text",
-      sendMode: "line",
-      count: 1,
-      intervalSeconds: 1,
-      target: "current",
-    });
-    setMultiLinePasteText(null);
-  }, [sessionId, sessionType]);
+  const handleSendMultiLinePasteByLine = useCallback(
+    (text: string) => {
+      if (!text) return;
+      openSendCommandPanel({
+        text,
+        sourceSessionId: sessionId,
+        sourceSessionType: sessionType,
+        dataType: "text",
+        sendMode: "line",
+        count: 1,
+        intervalSeconds: 1,
+        target: "current",
+      });
+      setMultiLinePasteText(null);
+    },
+    [sessionId, sessionType],
+  );
 
   useEffect(() => {
     doFindRef.current = doFind;

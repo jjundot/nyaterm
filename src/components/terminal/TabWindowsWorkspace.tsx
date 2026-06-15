@@ -1,12 +1,14 @@
-import { memo, useMemo, useRef } from "react";
+import { type DragEvent, memo, useMemo, useRef, useState } from "react";
 import ResizeHandle from "@/components/layout/ResizeHandle";
 import {
   isTerminalWindowSplit,
+  type SplitEdgeDirection,
   type TerminalWindowLeaf,
   type TerminalWindowNode,
   type TerminalWindowSplit,
 } from "@/lib/tabWindows";
 import type { PaneSplitDirection, SavedConnection, Tab } from "@/types/global";
+import DropZoneOverlay, { type DropZone } from "./DropZoneOverlay";
 import PaneWorkspace from "./PaneWorkspace";
 import TabBar from "./TabBar";
 
@@ -32,6 +34,7 @@ interface TabWindowsWorkspaceProps {
   onSessionInfo: (tab: Tab) => void | Promise<void>;
   onReorderTabs: (leafId: string, fromTabId: string, toIndex: number) => void;
   onMoveTabToLeaf?: (fromTabId: string, targetLeafId: string, toIndex: number) => void;
+  onSplitLeafWithTab?: (tabId: string, targetLeafId: string, direction: SplitEdgeDirection) => void;
   onActivatePane: (tabId: string, paneId: string) => void;
   onUpdatePaneSplitRatio: (tabId: string, splitId: string, ratio: number) => void;
   onUpdateWindowSplitRatio: (splitId: string, ratio: number) => void;
@@ -62,6 +65,7 @@ function SplitWindow({
   onSessionInfo,
   onReorderTabs,
   onMoveTabToLeaf,
+  onSplitLeafWithTab,
   onActivatePane,
   onUpdatePaneSplitRatio,
   onUpdateWindowSplitRatio,
@@ -113,6 +117,7 @@ function SplitWindow({
           onSessionInfo={onSessionInfo}
           onReorderTabs={onReorderTabs}
           onMoveTabToLeaf={onMoveTabToLeaf}
+          onSplitLeafWithTab={onSplitLeafWithTab}
           onActivatePane={onActivatePane}
           onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
           onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
@@ -145,6 +150,7 @@ function SplitWindow({
           onSessionInfo={onSessionInfo}
           onReorderTabs={onReorderTabs}
           onMoveTabToLeaf={onMoveTabToLeaf}
+          onSplitLeafWithTab={onSplitLeafWithTab}
           onActivatePane={onActivatePane}
           onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
           onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
@@ -179,6 +185,7 @@ function LeafWindow({
   onSessionInfo,
   onReorderTabs,
   onMoveTabToLeaf,
+  onSplitLeafWithTab,
   onActivatePane,
   onUpdatePaneSplitRatio,
   onReconnectPane,
@@ -187,6 +194,9 @@ function LeafWindow({
 }: {
   leaf: TerminalWindowLeaf;
 } & Omit<TabWindowsWorkspaceProps, "layout" | "onUpdateWindowSplitRatio">) {
+  const [dropZone, setDropZone] = useState<DropZone | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
   const tabs = useMemo(
     () => leaf.tabIds.map((tabId) => tabsById.get(tabId)).filter((tab): tab is Tab => !!tab),
     [leaf.tabIds, tabsById],
@@ -198,9 +208,65 @@ function LeafWindow({
   const activeTab =
     (leaf.activeTabId ? tabs.find((tab) => tab.id === leaf.activeTabId) : null) ?? tabs[0] ?? null;
 
+  const EDGE_THRESHOLD = 100;
+
+  const detectDropZone = (event: DragEvent<HTMLDivElement>): DropZone | null => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    if (x < EDGE_THRESHOLD) {
+      return { type: "edge", direction: "left", leafId: leaf.id };
+    }
+    if (x > rect.width - EDGE_THRESHOLD) {
+      return { type: "edge", direction: "right", leafId: leaf.id };
+    }
+    if (y < EDGE_THRESHOLD) {
+      return { type: "edge", direction: "top", leafId: leaf.id };
+    }
+    if (y > rect.height - EDGE_THRESHOLD) {
+      return { type: "edge", direction: "bottom", leafId: leaf.id };
+    }
+
+    return { type: "center", leafId: leaf.id };
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes("application/nyaterm-tab")) return;
+    event.preventDefault();
+    setDropZone(detectDropZone(event));
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    // Only clear if leaving the container itself, not child elements
+    if (event.currentTarget === containerRef.current) {
+      setDropZone(null);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const tabId = event.dataTransfer.getData("application/nyaterm-tab");
+    if (!tabId) {
+      setDropZone(null);
+      return;
+    }
+
+    if (dropZone?.type === "edge" && dropZone.direction && onSplitLeafWithTab) {
+      onSplitLeafWithTab(tabId, leaf.id, dropZone.direction);
+    } else if (dropZone?.type === "center" && onMoveTabToLeaf) {
+      onMoveTabToLeaf(tabId, 0);
+    }
+
+    setDropZone(null);
+  };
+
   return (
     <div
-      className="nyaterm-wallpaper-transparent-surface flex h-full min-h-0 min-w-0 flex-col overflow-hidden border"
+      ref={containerRef}
+      className="nyaterm-wallpaper-transparent-surface relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border"
       style={{
         borderColor: "var(--df-border)",
         backgroundColor: "var(--df-bg-terminal)",
@@ -210,7 +276,11 @@ function LeafWindow({
           onSelectTab(leaf.id, activeTab.id);
         }
       }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {dropZone && <DropZoneOverlay zone={dropZone} />}
       <TabBar
         tabs={tabs}
         activeTabId={activeTab?.id ?? null}
@@ -282,6 +352,7 @@ function WindowNodeView({
   onSessionInfo,
   onReorderTabs,
   onMoveTabToLeaf,
+  onSplitLeafWithTab,
   onActivatePane,
   onUpdatePaneSplitRatio,
   onUpdateWindowSplitRatio,
@@ -315,6 +386,7 @@ function WindowNodeView({
         onSessionInfo={onSessionInfo}
         onReorderTabs={onReorderTabs}
         onMoveTabToLeaf={onMoveTabToLeaf}
+        onSplitLeafWithTab={onSplitLeafWithTab}
         onActivatePane={onActivatePane}
         onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
         onUpdateWindowSplitRatio={onUpdateWindowSplitRatio}
@@ -348,6 +420,7 @@ function WindowNodeView({
       onSessionInfo={onSessionInfo}
       onReorderTabs={onReorderTabs}
       onMoveTabToLeaf={onMoveTabToLeaf}
+      onSplitLeafWithTab={onSplitLeafWithTab}
       onActivatePane={onActivatePane}
       onUpdatePaneSplitRatio={onUpdatePaneSplitRatio}
       onReconnectPane={onReconnectPane}

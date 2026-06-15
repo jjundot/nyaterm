@@ -55,7 +55,9 @@ import {
   moveTabBetweenLeaves,
   reconcileTerminalWindows,
   reorderTabsInLeaf,
+  type SplitEdgeDirection,
   setLeafActiveTab,
+  splitLeafWithTab,
   splitTerminalWindowForTab,
   type TerminalWindowNode,
   updateTerminalWindowSplitRatio,
@@ -751,6 +753,21 @@ function App() {
         return next ?? current;
       });
       setActiveTabId(fromTabId);
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
+      });
+    },
+    [setActiveTabId],
+  );
+
+  const handleSplitLeafWithTab = useCallback(
+    (tabId: string, targetLeafId: string, direction: SplitEdgeDirection) => {
+      setTerminalWindows((current) => {
+        if (!current) return current;
+        const next = splitLeafWithTab(current, tabId, targetLeafId, direction);
+        return next ?? current;
+      });
+      setActiveTabId(tabId);
       requestAnimationFrame(() => {
         window.dispatchEvent(new CustomEvent("nyaterm:refresh-terminals"));
       });
@@ -2239,6 +2256,7 @@ function App() {
           onSessionInfo: handleSessionInfo,
           onReorderTabs: handleReorderTabsInLeaf,
           onMoveTabToLeaf: handleMoveTabToLeaf,
+          onSplitLeafWithTab: handleSplitLeafWithTab,
           onActivatePane: handleActivatePane,
           onUpdatePaneSplitRatio: handleUpdatePaneSplitRatio,
           onUpdateWindowSplitRatio: handleUpdateWindowSplitRatio,
