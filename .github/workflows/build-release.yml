@@ -172,8 +172,9 @@ jobs:
           set -euo pipefail
 
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY_B64:-}" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY_B64 is empty"
-            exit 1
+            echo "⚠️  TAURI_SIGNING_PRIVATE_KEY_B64 is not set - updater signing will be skipped"
+            echo "To enable updater signing, generate a key pair and add it to GitHub Secrets"
+            exit 0
           fi
 
           node <<'NODE'
