@@ -34,6 +34,8 @@ pub struct AppearanceSettings {
     pub terminal_theme: Option<String>,
     #[serde(default = "default_false")]
     pub panel_multi_open: bool,
+    #[serde(default = "default_opacity")]
+    pub header_opacity: f64,
 }
 
 fn default_app_theme() -> String {
@@ -46,7 +48,7 @@ fn default_ui_font() -> String {
     DEFAULT_UI_FONT_FAMILY.to_string()
 }
 fn default_font_size() -> f64 {
-    16.0
+    14.0
 }
 fn default_opacity() -> f64 {
     1.0
@@ -61,7 +63,7 @@ fn default_cursor_style() -> String {
     "block".to_string()
 }
 fn default_ui_font_size() -> f64 {
-    16.0
+    13.0
 }
 
 impl Default for AppearanceSettings {
@@ -81,6 +83,7 @@ impl Default for AppearanceSettings {
             ui_font_size: default_ui_font_size(),
             terminal_theme: None,
             panel_multi_open: false,
+            header_opacity: default_opacity(),
         }
     }
 }

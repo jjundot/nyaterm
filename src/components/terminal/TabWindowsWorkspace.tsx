@@ -257,7 +257,7 @@ function LeafWindow({
     if (dropZone?.type === "edge" && dropZone.direction && onSplitLeafWithTab) {
       onSplitLeafWithTab(tabId, leaf.id, dropZone.direction);
     } else if (dropZone?.type === "center" && onMoveTabToLeaf) {
-      onMoveTabToLeaf(tabId, 0);
+      onMoveTabToLeaf(tabId, leaf.id, 0);
     }
 
     setDropZone(null);

@@ -184,6 +184,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,
+    header_opacity: 1.0,
     background_image_path: null,
     background_image_fit: "cover",
     background_image_opacity: 0.45,

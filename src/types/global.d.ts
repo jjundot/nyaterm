@@ -455,6 +455,8 @@ export interface AppearanceSettings {
   terminal_theme: string | null;
   /** Allow opening multiple side panels at once, stacked vertically. */
   panel_multi_open: boolean;
+  /** Header (title bar) opacity, independent of background_opacity. */
+  header_opacity: number;
 }
 
 export interface ProxySettings {

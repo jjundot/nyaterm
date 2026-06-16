@@ -36,6 +36,8 @@ import {
   VscChromeMaximize,
   VscChromeMinimize,
   VscChromeRestore,
+  VscPin,
+  VscPinned,
 } from "react-icons/vsc";
 import packageJson from "@/../package.json";
 import QuitConfirmDialog from "@/components/dialog/app/QuitConfirmDialog";
@@ -163,6 +165,7 @@ export default function Header({
   const { updateAppSettings, updateUi, appSettings, tabs } = useApp();
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const { t, i18n } = useTranslation();
   const { handleExport, passwordAlert } = useConfigTransfer();
@@ -183,7 +186,13 @@ export default function Header({
       }
     };
 
+    const syncAlwaysOnTopState = async () => {
+      // Note: Tauri doesn't provide isAlwaysOnTop() method, so we track it ourselves
+      // The state will be synced when user clicks the pin button
+    };
+
     void syncMaximizedState();
+    void syncAlwaysOnTopState();
 
     let unlistenResized: (() => void) | undefined;
     appWindow
@@ -451,6 +460,21 @@ export default function Header({
     appWindow.toggleMaximize().catch(() => {});
   };
 
+  const handleToggleAlwaysOnTop = async () => {
+    const newState = !isAlwaysOnTop;
+    try {
+      await appWindow.setAlwaysOnTop(newState);
+      setIsAlwaysOnTop(newState);
+    } catch (error) {
+      logger.error({
+        domain: "ui.error",
+        event: "window.set_always_on_top_failed",
+        message: "Failed to toggle always on top",
+        error,
+      });
+    }
+  };
+
   const handleCloseWindow = () => {
     if (
       !appSettings.general.minimize_to_tray &&
@@ -471,7 +495,7 @@ export default function Header({
   return (
     <header
       className="h-10 border-b flex items-center gap-2 px-2 select-none shrink-0"
-      style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
+      style={{ backgroundColor: "var(--df-bg-header)", borderColor: "var(--df-border)" }}
     >
       <div className={`flex items-center gap-2 shrink-0${isMacOS ? " pl-[70px]" : ""}`}>
         {!isMacOS && (
@@ -570,6 +594,20 @@ export default function Header({
 
         {!isMacOS && (
           <div className="flex items-center h-full -mr-2 ml-1">
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              aria-label={isAlwaysOnTop ? t("menu.unpinWindow") : t("menu.pinWindow")}
+              onClick={handleToggleAlwaysOnTop}
+            >
+              {isAlwaysOnTop ? (
+                <VscPinned className="text-base" />
+              ) : (
+                <VscPin className="text-base" />
+              )}
+            </Button>
+
             <Button
               type="button"
               variant="ghost"

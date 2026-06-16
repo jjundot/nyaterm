@@ -281,8 +281,14 @@ function BackgroundImageSection({
             value: percentLabel(DEFAULT_BACKGROUND_CONTENT_OPACITY),
           })}
           value={appearance.background_opacity}
-          disabled={!hasImage}
           onChange={(value) => onChange({ background_opacity: value })}
+        />
+
+        <PercentSlider
+          label={t("settings.headerOpacity")}
+          desc={t("settings.headerOpacityDesc")}
+          value={appearance.header_opacity ?? appearance.background_opacity}
+          onChange={(value) => onChange({ header_opacity: value })}
         />
       </SettingFieldGrid>
     </SettingSection>

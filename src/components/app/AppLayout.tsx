@@ -138,6 +138,7 @@ export default function AppLayout({
   const { theme } = useTheme();
   const backgroundImagePath = appearance.background_image_path?.trim() ?? "";
   const [backgroundDataUrl, setBackgroundDataUrl] = useState("");
+  const hasTransparency = appearance.background_opacity < 1;
 
   useEffect(() => {
     let cancelled = false;
@@ -172,10 +173,12 @@ export default function AppLayout({
   const shellStyle = useMemo(
     () => ({
       ...buildSurfaceCssVariables(theme.colors, effectiveAppearance),
-      backgroundColor: theme.colors.bg,
+      // When transparency is enabled without background image, use transparent background
+      // to allow the window to show through to the desktop
+      backgroundColor: hasTransparency && !backgroundEnabled ? "transparent" : theme.colors.bg,
       color: "var(--df-text)",
     }),
-    [effectiveAppearance, theme.colors],
+    [effectiveAppearance, theme.colors, hasTransparency, backgroundEnabled],
   );
   const hasLeftActivityItems =
     leftActivityBar.items.length > 0 || (leftActivityBar.bottomItems?.length ?? 0) > 0;
@@ -208,6 +211,7 @@ export default function AppLayout({
     <div
       className="nyaterm-wallpaper-shell font-display relative h-full min-h-0 overflow-hidden"
       data-wallpaper-enabled={backgroundEnabled ? "true" : "false"}
+      data-transparency-enabled={hasTransparency ? "true" : "false"}
       style={shellStyle}
     >
       {backgroundEnabled && (
@@ -302,14 +306,13 @@ export default function AppLayout({
           <section
             className="flex-1 flex flex-col relative min-w-0 origin-top-left"
             style={{
-              backgroundColor: backgroundEnabled ? "transparent" : "var(--df-bg-terminal)",
+              backgroundColor: "transparent",
             }}
           >
             <div className="flex-1 relative overflow-hidden">
               {tabsCount === 0 ? (
                 <EmptyWorkspaceState
                   t={t}
-                  backgroundEnabled={backgroundEnabled}
                   openChatShortcut={emptyWorkspace.openChatShortcut}
                   showCommandsShortcut={emptyWorkspace.showCommandsShortcut}
                   switchTerminalShortcut={emptyWorkspace.switchTerminalShortcut}
@@ -486,7 +489,6 @@ export default function AppLayout({
 
 function EmptyWorkspaceState({
   t,
-  backgroundEnabled,
   openChatShortcut,
   showCommandsShortcut,
   switchTerminalShortcut,
@@ -495,7 +497,6 @@ function EmptyWorkspaceState({
   onSwitchTerminal,
 }: {
   t: TFunction;
-  backgroundEnabled: boolean;
   openChatShortcut: string;
   showCommandsShortcut: string;
   switchTerminalShortcut: string;
@@ -525,7 +526,7 @@ function EmptyWorkspaceState({
     <div
       className="flex h-full items-center justify-center px-6"
       style={{
-        backgroundColor: backgroundEnabled ? "var(--df-bg-terminal)" : undefined,
+        backgroundColor: "var(--df-bg-terminal)",
       }}
     >
       <div className="flex w-full max-w-[34rem] flex-col items-center">

@@ -29,9 +29,10 @@ export function isBackgroundImageEnabled(
 }
 
 export function isTerminalTransparencyEnabled(
-  appearance: Pick<AppearanceSettings, "background_image_path">,
+  appearance: Pick<AppearanceSettings, "background_image_path" | "background_opacity">,
 ) {
-  return isBackgroundImageEnabled(appearance);
+  // Enable transparency if either background image is set OR global opacity is less than 1
+  return isBackgroundImageEnabled(appearance) || appearance.background_opacity < 1;
 }
 
 export function shouldSuspendTerminalWebglForBackground(appearance: AppearanceSettings) {
@@ -129,15 +130,16 @@ export function buildSurfaceCssVariables(
   colors: ThemeColors,
   appearance: AppearanceSettings,
 ): CssVars {
-  const surfaceOpacity = isBackgroundImageEnabled(appearance)
-    ? clampOpacity(appearance.background_opacity)
-    : 1;
+  // Always apply the background_opacity setting, regardless of whether a background image is set
+  const surfaceOpacity = clampOpacity(appearance.background_opacity);
+  const headerOpacity = clampOpacity(appearance.header_opacity, surfaceOpacity);
   const bg = colorWithAlpha(colors.bg, surfaceOpacity);
   const bgPanel = colorWithAlpha(colors.bgPanel, surfaceOpacity);
   const bgTerminal = colorWithAlpha(colors.bgTerminal, surfaceOpacity);
   const bgHover = colorWithAlpha(colors.bgHover, surfaceOpacity);
   const bgInput = colorWithAlpha(colors.bgInput, surfaceOpacity);
   const bgSectionHeader = colorWithAlpha(colors.bgSectionHeader, surfaceOpacity);
+  const bgHeader = colorWithAlpha(colors.bgPanel, headerOpacity);
 
   return {
     "--df-bg": bg,
@@ -146,6 +148,7 @@ export function buildSurfaceCssVariables(
     "--df-bg-hover": bgHover,
     "--df-bg-input": bgInput,
     "--df-bg-section-header": bgSectionHeader,
+    "--df-bg-header": bgHeader,
     "--background": bg,
     "--card": bgPanel,
     "--popover": bgPanel,

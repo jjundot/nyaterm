@@ -1,0 +1,180 @@
+name: Sync Release to Gitee
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to sync (e.g., v1.1.6)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync-gitee:
+    name: Sync release assets to Gitee
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download GitHub release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          rm -rf release-assets
+          mkdir -p release-assets
+
+          echo "Downloading assets for tag: ${TAG}"
+
+          gh release download "${TAG}" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets
+
+          echo "Downloaded files:"
+          ls -lh release-assets/
+
+      - name: Create or update Gitee release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}  # 格式: owner/repo，例如 nyakang/nyaterm
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${TAG#v}"
+          GITEE_API="https://gitee.com/api/v5"
+
+          # 获取 GitHub Release 信息
+          RELEASE_INFO=$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}")
+
+          RELEASE_NAME=$(echo "$RELEASE_INFO" | jq -r '.name // "NyaTerm ${TAG}"')
+          RELEASE_BODY=$(echo "$RELEASE_INFO" | jq -r '.body // ""')
+
+          # 检查 Gitee release 是否存在
+          RELEASE_EXISTS=$(curl -fsSL \
+            "${GITEE_API}/repos/${GITEE_REPO}/releases/tags/${TAG}?access_token=${GITEE_TOKEN}" \
+            | jq -r '.id // "null"')
+
+          if [ "$RELEASE_EXISTS" = "null" ]; then
+            echo "Creating new Gitee release: ${TAG}"
+
+            RELEASE_RESPONSE=$(curl -fsSL -X POST \
+              "${GITEE_API}/repos/${GITEE_REPO}/releases" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"access_token\": \"${GITEE_TOKEN}\",
+                \"tag_name\": \"${TAG}\",
+                \"name\": \"${RELEASE_NAME}\",
+                \"body\": \"${RELEASE_BODY}\",
+                \"prerelease\": false,
+                \"target_commitish\": \"main\"
+              }")
+
+            RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
+          else
+            echo "Gitee release already exists: ${TAG}"
+            RELEASE_ID="$RELEASE_EXISTS"
+          fi
+
+          echo "RELEASE_ID=${RELEASE_ID}" >> "$GITHUB_ENV"
+
+      - name: Upload assets to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          GITEE_API="https://gitee.com/api/v5"
+
+          for file_path in release-assets/*; do
+            if [ ! -f "$file_path" ]; then
+              continue
+            fi
+
+            filename=$(basename "$file_path")
+
+            echo "Uploading: $filename"
+
+            curl -fsSL -X POST \
+              "${GITEE_API}/repos/${GITEE_REPO}/releases/${RELEASE_ID}/attach_files" \
+              -F "access_token=${GITEE_TOKEN}" \
+              -F "file=@${file_path}" \
+              || echo "Warning: Failed to upload $filename (may already exist)"
+          done
+
+          echo "✓ All assets uploaded to Gitee release ${TAG}"
+
+      - name: Generate Gitee latest.json
+        env:
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "release-assets/latest.json" ]; then
+            echo "Warning: latest.json not found in release assets"
+            exit 0
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const giteeRepo = process.env.GITEE_REPO;
+          const tag = process.env.TAG;
+
+          const manifest = JSON.parse(fs.readFileSync('release-assets/latest.json', 'utf8'));
+
+          // 将所有 GitHub URL 替换为 Gitee URL
+          for (const [platform, item] of Object.entries(manifest.platforms || {})) {
+            if (item.url) {
+              const filename = item.url.split('/').pop();
+              item.url = `https://gitee.com/${giteeRepo}/releases/download/${tag}/${filename}`;
+            }
+          }
+
+          fs.writeFileSync('release-assets/gitee-latest.json', JSON.stringify(manifest, null, 2));
+          console.log('✓ Generated gitee-latest.json');
+          NODE
+
+      - name: Upload latest.json to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_REPO: ${{ secrets.GITEE_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "release-assets/gitee-latest.json" ]; then
+            echo "Skipping latest.json upload (file not found)"
+            exit 0
+          fi
+
+          GITEE_API="https://gitee.com/api/v5"
+
+          echo "Uploading gitee-latest.json as latest.json"
+
+          curl -fsSL -X POST \
+            "${GITEE_API}/repos/${GITEE_REPO}/releases/${RELEASE_ID}/attach_files" \
+            -F "access_token=${GITEE_TOKEN}" \
+            -F "file=@release-assets/gitee-latest.json;filename=latest.json" \
+            || echo "Warning: Failed to upload latest.json"
+
+          echo "✓ Gitee mirror is ready: https://gitee.com/${GITEE_REPO}/releases/${TAG}"

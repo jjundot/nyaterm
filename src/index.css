@@ -55,7 +55,7 @@
 
 /* ── Map shadcn CSS vars to existing --df-* theme system ───────────────── */
 :root {
-  --radius: 0.5rem;
+  --radius: 0.125rem; /* Very sharp corners (2px) for VS Code-like crisp appearance */
   --background: var(--df-bg);
   --foreground: var(--df-text);
   --card: var(--df-bg-panel);
@@ -116,7 +116,7 @@
 
 ::-webkit-scrollbar-thumb {
   background: var(--df-scroll-thumb, #30363d);
-  border-radius: 10px;
+  border-radius: 0; /* Completely square scrollbar for maximum sharpness */
 }
 
 .terminal-scroll,
@@ -184,7 +184,7 @@
 .terminal-scroll::-webkit-scrollbar-thumb,
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--df-scroll-thumb, #30363d) 86%, transparent);
-  border-radius: 999px;
+  border-radius: 0; /* Completely square scrollbar for maximum sharpness */
 }
 
 .terminal-scroll::-webkit-scrollbar-thumb:hover,
@@ -195,7 +195,7 @@
 /* ── Active tab indicator ───────────────────────────────────────────────── */
 .active-tab {
   border-bottom: 2px solid var(--df-primary, #3b82f6);
-  background-color: color-mix(in srgb, var(--df-primary, #3b82f6) 5%, transparent);
+  background-color: color-mix(in srgb, var(--df-primary, #3b82f6) 8%, transparent);
 }
 
 
@@ -208,6 +208,7 @@ body,
   padding: 0;
   overflow: hidden;
   user-select: none;
+  background-color: transparent; /* Allow Tauri window transparency */
 }
 
 /* Allow text selection inside terminal */
@@ -215,6 +216,7 @@ body,
   user-select: text;
 }
 
+/* Enable terminal transparency when wallpaper is enabled */
 .nyaterm-wallpaper-shell[data-wallpaper-enabled="true"] .xterm,
 .nyaterm-wallpaper-shell[data-wallpaper-enabled="true"] .xterm .xterm-viewport,
 .nyaterm-wallpaper-shell[data-wallpaper-enabled="true"] .xterm .xterm-screen,
@@ -227,23 +229,35 @@ body,
 }
 
 .nyaterm-wallpaper-shell[data-wallpaper-enabled="true"] .nyaterm-wallpaper-card {
-  background-color: color-mix(in srgb, var(--df-bg) 55%, transparent) !important;
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  background-color: color-mix(in srgb, var(--df-bg) 75%, transparent) !important;
+  backdrop-filter: blur(2px) saturate(1.05); /* Reduced blur for sharper appearance */
+  -webkit-backdrop-filter: blur(2px) saturate(1.05);
+}
+
+/* Enable terminal and window transparency when global transparency is enabled (no wallpaper needed) */
+.nyaterm-wallpaper-shell[data-transparency-enabled="true"] .xterm,
+.nyaterm-wallpaper-shell[data-transparency-enabled="true"] .xterm .xterm-viewport,
+.nyaterm-wallpaper-shell[data-transparency-enabled="true"] .xterm .xterm-screen,
+.nyaterm-wallpaper-shell[data-transparency-enabled="true"] .xterm .xterm-screen canvas {
+  background-color: transparent !important;
+}
+
+.nyaterm-wallpaper-shell[data-transparency-enabled="true"] .nyaterm-wallpaper-transparent-surface {
+  background-color: transparent !important;
 }
 
 .xterm .xterm-link-popup {
   position: absolute;
   z-index: 20;
   max-width: min(36rem, calc(100% - 1rem));
-  padding: 0.5rem 0.625rem;
+  padding: 0.375rem 0.5rem; /* Tighter padding */
   border: 1px solid var(--df-border);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--df-bg-panel) 96%, black 4%);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  border-radius: 0.125rem; /* Very sharp corners */
+  background: color-mix(in srgb, var(--df-bg-panel) 98%, black 2%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 32%); /* Crisper, closer shadow */
   color: var(--df-text);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  font-size: 0.6875rem; /* Smaller font (11px) */
+  line-height: 1.4;
   white-space: normal;
   word-break: break-word;
 }
