@@ -35,3 +35,8 @@ dist-ssr
 .claude
 .codex
 .trae
+
+# Tauri signing keys (IMPORTANT: Never commit these!)
+~/.tauri/
+*.key
+*.key.pub
