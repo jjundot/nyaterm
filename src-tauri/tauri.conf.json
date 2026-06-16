@@ -44,7 +44,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0MUFEQTEwRDhFOUFGMjYKUldRbXIrbllFTm9haEZBTkt3U2pCNGg4SEJ4ekV0azhNWnVlOXhRa3JlN2xIS005K1V5TWlNVU8K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI1REIyMEMzMjdEMTJDQUEKUldTcUxORW53eURidGNSaFZTRUxBY1dsakNJbFhicmdmVk1McStCY3RWa21jTDN4OTBtZ2E3aGIK",
       "endpoints": [
         "https://gitee.com/jjundot/nyaterm/releases/latest/download/latest.json",
         "https://github.com/jjundot/nyaterm/releases/latest/download/latest.json"
