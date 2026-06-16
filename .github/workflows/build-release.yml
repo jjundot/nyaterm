@@ -168,6 +168,7 @@ jobs:
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -183,20 +184,26 @@ jobs:
           const path = require('path');
 
           const keyB64 = process.env.TAURI_SIGNING_PRIVATE_KEY_B64 || '';
+          const password = process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '';
           const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
           const keyPath = path.join(runnerTemp, 'tauri-updater.key');
 
           fs.writeFileSync(keyPath, Buffer.from(keyB64, 'base64'));
           fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY=${keyPath}\n`);
 
-          console.log(`Tauri updater signing key prepared at: ${keyPath}`);
+          // Only set password env var if it's actually defined and non-empty
+          if (password && password.length > 0) {
+            fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${password}\n`);
+            console.log(`Tauri updater signing key prepared at: ${keyPath} (with password)`);
+          } else {
+            console.log(`Tauri updater signing key prepared at: ${keyPath} (no password)`);
+          }
           NODE
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPIMAGE_EXTRACT_AND_RUN: ${{ matrix.target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
         with:
           tagName: ${{ github.ref_name }}
