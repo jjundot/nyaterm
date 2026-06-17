@@ -84,7 +84,8 @@ jobs:
                 tag_name: $tag,
                 name: $name,
                 body: $body,
-                prerelease: false
+                prerelease: false,
+                target_commitish: "main"
               }')
 
             echo "Payload preview:"
