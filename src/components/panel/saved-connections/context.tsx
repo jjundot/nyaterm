@@ -56,6 +56,7 @@ export interface SavedConnectionsContextValue {
   openNewFolderDialog: (parentId: string | null) => void;
   openRenameFolderDialog: (g: Group) => void;
   requestOpenGroupConnections: (node: GroupNode) => void;
+  toggleGroupSyncExclusion: (g: Group) => void;
 
   // Drag handlers
   handleDragStart: (e: React.DragEvent, type: "connection" | "group", id: string) => void;

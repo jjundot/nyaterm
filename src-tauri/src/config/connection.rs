@@ -206,6 +206,9 @@ pub struct Group {
     pub created_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at_ms: Option<u64>,
+    /// When true, this group and its contents are excluded from cloud sync.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub exclude_from_sync: bool,
 }
 
 /// Root config for groups and saved connections.

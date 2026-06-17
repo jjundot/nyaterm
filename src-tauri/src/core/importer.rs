@@ -1017,6 +1017,7 @@ fn ensure_group_path(
                 sort_order: *next_sort,
                 created_at_ms: None,
                 updated_at_ms: None,
+                exclude_from_sync: false,
             });
             *next_sort += 1;
             path_map.insert(prefix, id.clone());

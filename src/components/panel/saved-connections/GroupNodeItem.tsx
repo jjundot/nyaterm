@@ -1,5 +1,7 @@
 import {
   MdAdd,
+  MdCloud,
+  MdCloudOff,
   MdCreateNewFolder,
   MdDelete,
   MdDriveFileRenameOutline,
@@ -35,6 +37,7 @@ export default function GroupNodeItem({ node, depth }: GroupNodeItemProps) {
     openRenameFolderDialog,
     requestOpenGroupConnections,
     setDeleteFolderTarget,
+    toggleGroupSyncExclusion,
     handleDragStart,
     handleDragEnd,
     handleDragEnterItem,
@@ -102,6 +105,13 @@ export default function GroupNodeItem({ node, depth }: GroupNodeItemProps) {
             >
               {node.group.name}
             </span>
+            {!node.group.exclude_from_sync && (
+              <MdCloud
+                className="text-xs shrink-0 opacity-50"
+                style={{ color: "var(--df-text-dimmed)" }}
+                title={t("savedConnections.syncEnabled")}
+              />
+            )}
             <span
               className="text-xs tabular-nums shrink-0"
               style={{ color: "var(--df-text-dimmed)" }}
@@ -148,6 +158,14 @@ export default function GroupNodeItem({ node, depth }: GroupNodeItemProps) {
           <MdDriveFileRenameOutline className="text-[0.875rem] text-muted-foreground mr-2" />
           {t("savedConnections.renameFolder")}
         </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onClick={() => toggleGroupSyncExclusion(node.group)}>
+          <MdCloudOff className="text-[0.875rem] text-muted-foreground mr-2" />
+          {node.group.exclude_from_sync
+            ? t("savedConnections.includeInSync")
+            : t("savedConnections.excludeFromSync")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem className="text-red-400" onClick={() => setDeleteFolderTarget(node.group)}>
           <MdDelete className="text-[0.875rem] mr-2" />
           {t("savedConnections.deleteFolder")}

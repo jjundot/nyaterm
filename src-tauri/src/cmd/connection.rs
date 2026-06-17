@@ -270,6 +270,7 @@ mod tests {
             sort_order: 0,
             created_at_ms: None,
             updated_at_ms: None,
+            exclude_from_sync: false,
         }
     }
 

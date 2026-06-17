@@ -209,6 +209,10 @@ pub fn build_portable_snapshot(
         Vec::new()
     };
 
+    let sessions = config::load_sessions(app)?;
+    // Filter excluded groups for both Sync and Backup
+    let filtered_sessions = filter_sync_excluded_data(&sessions);
+
     let mut snapshot = PortableSnapshot {
         schema_version: PORTABLE_SNAPSHOT_SCHEMA_VERSION,
         snapshot_kind,
@@ -218,7 +222,7 @@ pub fn build_portable_snapshot(
         payload_hash: String::new(),
         app_version: app.package_info().version.to_string(),
         settings: PortableAppSettings::from_app_settings(&settings),
-        sessions: config::load_sessions(app)?,
+        sessions: filtered_sessions,
         keys: config::load_keys(app)?,
         passwords: config::load_passwords(app)?,
         credentials: config::load_credentials(app)?,
@@ -419,7 +423,10 @@ pub async fn apply_portable_snapshot(
 ) -> AppResult<()> {
     validate_portable_snapshot(snapshot)?;
 
-    config::save_sessions(app, &snapshot.sessions)?;
+    let local_sessions = config::load_sessions(app).unwrap_or_default();
+    let merged_sessions = merge_sync_excluded_data(&local_sessions, &snapshot.sessions);
+
+    config::save_sessions(app, &merged_sessions)?;
     config::save_keys(app, &snapshot.keys)?;
     config::save_passwords(app, &snapshot.passwords)?;
     config::save_credentials(app, &snapshot.credentials)?;
@@ -662,6 +669,129 @@ fn zip_error(error: impl std::fmt::Display) -> AppError {
     AppError::Config(format!("portable snapshot zip error: {error}"))
 }
 
+/// Filters out groups marked as `exclude_from_sync` and their connections.
+fn filter_sync_excluded_data(sessions: &config::SessionsConfig) -> config::SessionsConfig {
+    use std::collections::HashSet;
+
+    let excluded_group_ids: HashSet<String> = sessions
+        .groups
+        .iter()
+        .filter(|g| g.exclude_from_sync)
+        .map(|g| g.id.clone())
+        .collect();
+
+    if excluded_group_ids.is_empty() {
+        return sessions.clone();
+    }
+
+    let mut all_excluded_ids = excluded_group_ids.clone();
+    loop {
+        let children: HashSet<String> = sessions
+            .groups
+            .iter()
+            .filter(|g| {
+                g.parent_id
+                    .as_ref()
+                    .is_some_and(|pid| all_excluded_ids.contains(pid))
+            })
+            .map(|g| g.id.clone())
+            .collect();
+        if children.is_empty() {
+            break;
+        }
+        all_excluded_ids.extend(children);
+    }
+
+    let groups = sessions
+        .groups
+        .iter()
+        .filter(|g| !all_excluded_ids.contains(&g.id))
+        .cloned()
+        .collect();
+
+    let connections = sessions
+        .connections
+        .iter()
+        .filter(|c| {
+            c.group_id
+                .as_ref()
+                .map_or(true, |gid| !all_excluded_ids.contains(gid))
+        })
+        .cloned()
+        .collect();
+
+    config::SessionsConfig {
+        groups,
+        connections,
+    }
+}
+
+/// Merges remote snapshot data with local sync-excluded groups and connections.
+fn merge_sync_excluded_data(
+    local: &config::SessionsConfig,
+    remote: &config::SessionsConfig,
+) -> config::SessionsConfig {
+    use std::collections::HashSet;
+
+    let excluded_group_ids: HashSet<String> = local
+        .groups
+        .iter()
+        .filter(|g| g.exclude_from_sync)
+        .map(|g| g.id.clone())
+        .collect();
+
+    if excluded_group_ids.is_empty() {
+        return remote.clone();
+    }
+
+    let mut all_excluded_ids = excluded_group_ids.clone();
+    loop {
+        let children: HashSet<String> = local
+            .groups
+            .iter()
+            .filter(|g| {
+                g.parent_id
+                    .as_ref()
+                    .is_some_and(|pid| all_excluded_ids.contains(pid))
+            })
+            .map(|g| g.id.clone())
+            .collect();
+        if children.is_empty() {
+            break;
+        }
+        all_excluded_ids.extend(children);
+    }
+
+    let local_excluded_groups: Vec<_> = local
+        .groups
+        .iter()
+        .filter(|g| all_excluded_ids.contains(&g.id))
+        .cloned()
+        .collect();
+
+    let local_excluded_connections: Vec<_> = local
+        .connections
+        .iter()
+        .filter(|c| {
+            c.group_id
+                .as_ref()
+                .is_some_and(|gid| all_excluded_ids.contains(gid))
+        })
+        .cloned()
+        .collect();
+
+    let mut groups = remote.groups.clone();
+    groups.extend(local_excluded_groups);
+
+    let mut connections = remote.connections.clone();
+    connections.extend(local_excluded_connections);
+
+    config::SessionsConfig {
+        groups,
+        connections,
+    }
+}
+
 struct TempRedbFile {
     path: PathBuf,
 }
@@ -688,9 +818,10 @@ impl Drop for TempRedbFile {
 #[cfg(test)]
 mod tests {
     use super::{
-        PORTABLE_SNAPSHOT_SCHEMA_VERSION, PortableAppSettings, PortableSnapshot,
-        PortableSnapshotKind, PortableUiSettings, SNAPSHOT_ZIP_PAYLOAD_NAME,
         calculate_payload_hash, encode_portable_snapshot, encode_portable_snapshot_redb,
+        filter_sync_excluded_data, merge_sync_excluded_data, PortableAppSettings,
+        PortableSnapshot, PortableSnapshotKind, PortableUiSettings,
+        PORTABLE_SNAPSHOT_SCHEMA_VERSION, SNAPSHOT_ZIP_PAYLOAD_NAME,
     };
     use crate::config::{self, ActivityBarLayout, AppSettings};
     use std::io::Write;
@@ -853,5 +984,188 @@ mod tests {
             compressed.len() < legacy.len(),
             "compressed snapshot should be smaller than legacy redb"
         );
+    }
+
+    #[test]
+    fn filter_sync_excluded_data_removes_excluded_groups() {
+        let mut sessions = config::SessionsConfig::default();
+        sessions.groups = vec![
+            config::Group {
+                id: "g1".to_string(),
+                name: "Group 1".to_string(),
+                parent_id: None,
+                sort_order: 0,
+                created_at_ms: None,
+                updated_at_ms: None,
+                exclude_from_sync: false,
+            },
+            config::Group {
+                id: "g2".to_string(),
+                name: "Group 2".to_string(),
+                parent_id: None,
+                sort_order: 1,
+                created_at_ms: None,
+                updated_at_ms: None,
+                exclude_from_sync: true,
+            },
+            config::Group {
+                id: "g3".to_string(),
+                name: "Group 3".to_string(),
+                parent_id: Some("g2".to_string()),
+                sort_order: 0,
+                created_at_ms: None,
+                updated_at_ms: None,
+                exclude_from_sync: false,
+            },
+        ];
+        sessions.connections = vec![
+            config::SavedConnection {
+                id: "c1".to_string(),
+                name: "Conn 1".to_string(),
+                config: config::ConnectionType::Ssh {
+                    host: "host1.com".to_string(),
+                    port: 22,
+                    username: "root".to_string(),
+                },
+                group_id: Some("g1".to_string()),
+                description: None,
+                sort_order: 0,
+                icon: None,
+                auth: None,
+                network: None,
+                post_login: None,
+                created_at_ms: None,
+                updated_at_ms: None,
+                last_used_at_ms: None,
+            },
+            config::SavedConnection {
+                id: "c2".to_string(),
+                name: "Conn 2".to_string(),
+                config: config::ConnectionType::Ssh {
+                    host: "host2.com".to_string(),
+                    port: 22,
+                    username: "root".to_string(),
+                },
+                group_id: Some("g2".to_string()),
+                description: None,
+                sort_order: 0,
+                icon: None,
+                auth: None,
+                network: None,
+                post_login: None,
+                created_at_ms: None,
+                updated_at_ms: None,
+                last_used_at_ms: None,
+            },
+            config::SavedConnection {
+                id: "c3".to_string(),
+                name: "Conn 3".to_string(),
+                config: config::ConnectionType::Ssh {
+                    host: "host3.com".to_string(),
+                    port: 22,
+                    username: "root".to_string(),
+                },
+                group_id: Some("g3".to_string()),
+                description: None,
+                sort_order: 0,
+                icon: None,
+                auth: None,
+                network: None,
+                post_login: None,
+                created_at_ms: None,
+                updated_at_ms: None,
+                last_used_at_ms: None,
+            },
+        ];
+
+        let filtered = filter_sync_excluded_data(&sessions);
+
+        assert_eq!(filtered.groups.len(), 1);
+        assert_eq!(filtered.groups[0].id, "g1");
+        assert_eq!(filtered.connections.len(), 1);
+        assert_eq!(filtered.connections[0].id, "c1");
+    }
+
+    #[test]
+    fn merge_sync_excluded_data_preserves_local_excluded_groups() {
+        let mut local = config::SessionsConfig::default();
+        local.groups = vec![
+            config::Group {
+                id: "g1".to_string(),
+                name: "Local Group 1".to_string(),
+                parent_id: None,
+                sort_order: 0,
+                created_at_ms: None,
+                updated_at_ms: None,
+                exclude_from_sync: false,
+            },
+            config::Group {
+                id: "g2".to_string(),
+                name: "Local Excluded".to_string(),
+                parent_id: None,
+                sort_order: 1,
+                created_at_ms: None,
+                updated_at_ms: None,
+                exclude_from_sync: true,
+            },
+        ];
+        local.connections = vec![config::SavedConnection {
+            id: "c2".to_string(),
+            name: "Local Conn 2".to_string(),
+            config: config::ConnectionType::Ssh {
+                host: "local.com".to_string(),
+                port: 22,
+                username: "root".to_string(),
+            },
+            group_id: Some("g2".to_string()),
+            description: None,
+            sort_order: 0,
+            icon: None,
+            auth: None,
+            network: None,
+            post_login: None,
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
+        }];
+
+        let mut remote = config::SessionsConfig::default();
+        remote.groups = vec![config::Group {
+            id: "g3".to_string(),
+            name: "Remote Group 3".to_string(),
+            parent_id: None,
+            sort_order: 0,
+            created_at_ms: None,
+            updated_at_ms: None,
+            exclude_from_sync: false,
+        }];
+        remote.connections = vec![config::SavedConnection {
+            id: "c3".to_string(),
+            name: "Remote Conn 3".to_string(),
+            config: config::ConnectionType::Ssh {
+                host: "remote.com".to_string(),
+                port: 22,
+                username: "root".to_string(),
+            },
+            group_id: Some("g3".to_string()),
+            description: None,
+            sort_order: 0,
+            icon: None,
+            auth: None,
+            network: None,
+            post_login: None,
+            created_at_ms: None,
+            updated_at_ms: None,
+            last_used_at_ms: None,
+        }];
+
+        let merged = merge_sync_excluded_data(&local, &remote);
+
+        assert_eq!(merged.groups.len(), 2);
+        assert!(merged.groups.iter().any(|g| g.id == "g2"));
+        assert!(merged.groups.iter().any(|g| g.id == "g3"));
+        assert_eq!(merged.connections.len(), 2);
+        assert!(merged.connections.iter().any(|c| c.id == "c2"));
+        assert!(merged.connections.iter().any(|c| c.id == "c3"));
     }
 }

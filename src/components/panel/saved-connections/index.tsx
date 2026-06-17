@@ -259,7 +259,7 @@ export default function SavedConnections({
       });
       return changed ? next : prev;
     });
-  }, [keyword, rootNodes]);
+  }, [keyword, rootNodes, expandedGroups]);
 
   const visibleConnectionIds = useMemo(() => {
     const ids: string[] = [];
@@ -624,6 +624,21 @@ export default function SavedConnections({
     setOpenGroupTarget(null);
   };
 
+  const toggleGroupSyncExclusion = async (group: Group) => {
+    try {
+      await invoke("save_group", {
+        group: { ...group, exclude_from_sync: !group.exclude_from_sync },
+      });
+      refreshConnections();
+      const messageKey = group.exclude_from_sync
+        ? "savedConnections.includeInSyncSuccess"
+        : "savedConnections.excludeFromSyncSuccess";
+      toast.success(t(messageKey, { name: group.name }));
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
   // ── Drag & Drop ───────────────────────────────────────────────────────────
   const setDragTarget = (val: DragTarget | null) => {
     dragTargetRef.current = val;
@@ -983,6 +998,7 @@ export default function SavedConnections({
     openNewFolderDialog,
     openRenameFolderDialog,
     requestOpenGroupConnections,
+    toggleGroupSyncExclusion,
     handleDragStart,
     handleDragEnd,
     handleDragEnterItem,

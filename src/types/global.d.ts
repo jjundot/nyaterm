@@ -108,6 +108,8 @@ export interface Group {
   name: string;
   parent_id?: string;
   sort_order: number;
+  /** When true, this group and its contents are excluded from cloud sync. */
+  exclude_from_sync?: boolean;
 }
 
 /** Managed SSH private key stored in local app storage. */

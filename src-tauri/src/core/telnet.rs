@@ -10,12 +10,12 @@ use crate::config::AiExecutionProfile;
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::{RecordingManager, SessionOutputCoalescer};
 use crate::error::AppResult;
-use crate::observability::{log_event, log_rate_limited, StructuredLog, StructuredLogLevel};
+use crate::observability::{StructuredLog, StructuredLogLevel, log_event, log_rate_limited};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex as TokioMutex};
+use tokio::sync::{Mutex as TokioMutex, mpsc};
 
 const IAC: u8 = 255;
 const WILL: u8 = 251;

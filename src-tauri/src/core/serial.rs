@@ -10,7 +10,7 @@ use crate::config::AiExecutionProfile;
 use crate::core::capture::OutputCaptureProcessor;
 use crate::core::{RecordingManager, SessionOutputCoalescer};
 use crate::error::{AppError, AppResult};
-use crate::observability::{log_event, log_rate_limited, StructuredLog, StructuredLogLevel};
+use crate::observability::{StructuredLog, StructuredLogLevel, log_event, log_rate_limited};
 use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
