@@ -131,6 +131,8 @@ jobs:
           set -euo pipefail
 
           GITEE_API="https://gitee.com/api/v5"
+          SKIPPED_COUNT=0
+          UPLOADED_COUNT=0
 
           for file_path in release-assets/*; do
             if [ ! -f "$file_path" ]; then
@@ -138,10 +140,18 @@ jobs:
             fi
 
             filename=$(basename "$file_path")
-            filesize=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || echo "unknown")
+            filesize=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || echo "0")
+            filesize_mb=$((filesize / 1024 / 1024))
+
+            # 跳过超过 50MB 的文件（Gitee 上传限制和速度问题）
+            if [ "$filesize" -gt 52428800 ]; then
+              echo "⊘ Skipping $filename (${filesize_mb}MB - too large for Gitee)"
+              SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+              continue
+            fi
 
             echo "----------------------------------------"
-            echo "Uploading: $filename (size: $filesize bytes)"
+            echo "Uploading: $filename (${filesize_mb}MB)"
             echo "----------------------------------------"
 
             # 使用 --max-time 300 (5分钟超时)，显示进度，最多重试 2 次
@@ -156,11 +166,13 @@ jobs:
 
               if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
                 echo "✓ Uploaded successfully"
+                UPLOADED_COUNT=$((UPLOADED_COUNT + 1))
                 break
               elif [ "$HTTP_CODE" = "400" ]; then
                 RESPONSE=$(cat /tmp/upload_response.json 2>/dev/null || echo "")
                 if echo "$RESPONSE" | grep -q "already exists\|已存在"; then
                   echo "⚠ File already exists, skipping"
+                  UPLOADED_COUNT=$((UPLOADED_COUNT + 1))
                   break
                 else
                   echo "✗ Upload failed with HTTP $HTTP_CODE (attempt $attempt/3)"
@@ -182,7 +194,14 @@ jobs:
           done
 
           echo ""
-          echo "✓ All assets processed for Gitee release ${TAG}"
+          echo "========================================="
+          echo "✓ Upload completed"
+          echo "  Uploaded: $UPLOADED_COUNT files"
+          echo "  Skipped: $SKIPPED_COUNT files (too large)"
+          echo "========================================="
+          echo ""
+          echo "Note: AppImage files (90MB+) are skipped due to Gitee upload limits."
+          echo "Users can download them from GitHub: https://github.com/${{ github.repository }}/releases/${TAG}"
 
       - name: Generate Gitee latest.json
         env:
