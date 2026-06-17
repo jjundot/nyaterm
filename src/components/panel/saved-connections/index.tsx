@@ -8,7 +8,6 @@ import {
   MdDeleteSweep,
   MdLink,
   MdMoreVert,
-  MdRefresh,
   MdSearch,
   MdSort,
   MdSortByAlpha,
