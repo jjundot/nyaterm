@@ -1,0 +1,331 @@
+/* ── VSCode-like Visual Enhancements ─────────────────────────────────────── */
+
+/* Activity bar items - VSCode style */
+[data-activity-item] {
+  position: relative;
+  width: 100%;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  transition: background-color 50ms ease-out;
+}
+
+[data-activity-item]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 6%, transparent);
+}
+
+[data-activity-item][data-active="true"] {
+  background-color: transparent;
+}
+
+/* Active indicator for activity bar - left border like VSCode */
+[data-activity-item][data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--df-primary);
+}
+
+[data-activity-item][data-side="right"][data-active="true"]::before {
+  left: auto;
+  right: 0;
+}
+
+/* Tab bar - VSCode style */
+[data-tab-bar] {
+  background-color: var(--df-bg);
+  border-bottom: 1px solid var(--df-border);
+  height: 35px;
+  display: flex;
+  align-items: stretch;
+}
+
+/* Individual tabs - VSCode style */
+[data-tab-item] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 35px;
+  min-width: 120px;
+  max-width: 240px;
+  background-color: var(--df-bg);
+  border-right: 1px solid var(--df-border);
+  transition: background-color 50ms ease-out;
+  cursor: pointer;
+}
+
+[data-tab-item]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 6%, transparent);
+}
+
+[data-tab-item][data-active="true"] {
+  background-color: var(--df-bg-panel);
+  border-top: 1px solid var(--df-primary);
+}
+
+/* Close button in tabs */
+[data-tab-close] {
+  opacity: 0;
+  transition: opacity 50ms ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+[data-tab-item]:hover [data-tab-close],
+[data-tab-item][data-active="true"] [data-tab-close] {
+  opacity: 1;
+}
+
+[data-tab-close]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 10%, transparent);
+}
+
+/* Panel headers - VSCode style */
+[data-panel-header] {
+  background-color: var(--df-bg-section-header);
+  border-bottom: 1px solid var(--df-border);
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--df-text-muted);
+}
+
+/* Button styles - flatter VSCode look */
+[data-vscode-button] {
+  background-color: var(--df-primary);
+  color: var(--df-on-primary);
+  border: none;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 50ms ease-out;
+}
+
+[data-vscode-button]:hover {
+  background-color: var(--df-primary-hover);
+}
+
+[data-vscode-button][data-secondary="true"] {
+  background-color: color-mix(in srgb, var(--df-text) 8%, transparent);
+  color: var(--df-text);
+}
+
+[data-vscode-button][data-secondary="true"]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 12%, transparent);
+}
+
+/* Input fields - VSCode style */
+[data-vscode-input] {
+  background-color: var(--df-bg-input);
+  border: 1px solid var(--df-border);
+  color: var(--df-text);
+  padding: 4px 8px;
+  font-size: 13px;
+  transition: border-color 100ms ease-out;
+}
+
+[data-vscode-input]:focus {
+  outline: none;
+  border-color: var(--df-primary);
+}
+
+/* Context menu - VSCode style */
+[data-vscode-menu] {
+  background-color: var(--df-bg-panel);
+  border: 1px solid var(--df-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  padding: 4px 0;
+  min-width: 160px;
+}
+
+[data-vscode-menu-item] {
+  padding: 4px 24px 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 50ms ease-out;
+}
+
+[data-vscode-menu-item]:hover {
+  background-color: var(--df-primary);
+  color: var(--df-on-primary);
+}
+
+[data-vscode-menu-separator] {
+  height: 1px;
+  background-color: var(--df-border);
+  margin: 4px 0;
+}
+
+/* Sidebar - VSCode style */
+[data-sidebar] {
+  background-color: var(--df-bg-panel);
+  border-right: 1px solid var(--df-border);
+}
+
+[data-sidebar][data-side="right"] {
+  border-right: none;
+  border-left: 1px solid var(--df-border);
+}
+
+/* Status bar - VSCode style */
+[data-status-bar] {
+  background-color: var(--df-primary);
+  color: var(--df-on-primary);
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 12px;
+  gap: 12px;
+}
+
+[data-status-bar-item] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: background-color 50ms ease-out;
+}
+
+[data-status-bar-item]:hover {
+  background-color: color-mix(in srgb, var(--df-on-primary) 15%, transparent);
+}
+
+/* List items - VSCode style */
+[data-list-item] {
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 50ms ease-out;
+  border-left: 2px solid transparent;
+}
+
+[data-list-item]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 8%, transparent);
+}
+
+[data-list-item][data-active="true"] {
+  background-color: color-mix(in srgb, var(--df-primary) 20%, transparent);
+  border-left-color: var(--df-primary);
+}
+
+/* Tree view items */
+[data-tree-item] {
+  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background-color 50ms ease-out;
+}
+
+[data-tree-item]:hover {
+  background-color: color-mix(in srgb, var(--df-text) 8%, transparent);
+}
+
+[data-tree-item][data-selected="true"] {
+  background-color: color-mix(in srgb, var(--df-primary) 25%, transparent);
+}
+
+/* Badges - VSCode style */
+[data-badge] {
+  background-color: var(--df-primary);
+  color: var(--df-on-primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 11px;
+  line-height: 1;
+}
+
+[data-badge][data-variant="secondary"] {
+  background-color: color-mix(in srgb, var(--df-text) 15%, transparent);
+  color: var(--df-text);
+}
+
+/* Split view handles - VSCode style */
+[data-split-handle] {
+  background-color: var(--df-border);
+  transition: background-color 100ms ease-out;
+}
+
+[data-split-handle]:hover {
+  background-color: var(--df-primary);
+}
+
+/* Focus rings - VSCode style */
+*:focus-visible {
+  outline: 1px solid var(--df-focus-ring);
+  outline-offset: -1px;
+}
+
+/* Smooth animations */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Typography - tighter like VSCode */
+body {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h2 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Code blocks - VSCode style */
+code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background-color: color-mix(in srgb, var(--df-text) 8%, transparent);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background-color: var(--df-bg-input);
+  padding: 12px;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+
+/* Selection - VSCode blue */
+::selection {
+  background-color: color-mix(in srgb, var(--df-primary) 40%, transparent);
+}

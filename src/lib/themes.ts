@@ -65,6 +65,63 @@ export interface Theme {
   colors: ThemeColors;
 }
 
+// ── VS Code Dark+ ─────────────────────────────────────────────────────────
+const vscodeDark = {
+  id: "vscode-dark",
+  name: "VS Code Dark+",
+  label: "VS Code",
+  swatch: "#1e1e1e",
+  colors: {
+    bg: "#1e1e1e",
+    bgPanel: "#252526",
+    bgTerminal: "#1e1e1e",
+    bgHover: "#2a2d2e",
+    bgInput: "#3c3c3c",
+    bgSectionHeader: "#252526",
+    border: "#3c3c3c",
+    text: "#cccccc",
+    textMuted: "#9d9d9d",
+    textDimmed: "#6a6a6a",
+    primary: "#007acc",
+    primaryHover: "#005a9e",
+    onPrimary: "#ffffff",
+    focusRing: "#007fd4",
+    danger: "#f48771",
+    dangerHover: "#e06c50",
+    success: "#89d185",
+    warning: "#cca700",
+    link: "#3794ff",
+    shadow: "rgba(0, 0, 0, 0.36)",
+    scrollThumb: "#424242",
+    accent: "#0e639c",
+    terminal: {
+      background: "#1e1e1e",
+      foreground: "#cccccc",
+      cursor: "#aeafad",
+      selectionBackground: "#264f78",
+      lineHighlight: "#282828",
+      findMatchBackground: "rgba(234, 92, 0, 0.33)",
+      findMatchBorder: "#cca700",
+      black: "#000000",
+      red: "#cd3131",
+      green: "#0dbc79",
+      yellow: "#e5e510",
+      blue: "#2472c8",
+      magenta: "#bc3fbc",
+      cyan: "#11a8cd",
+      white: "#e5e5e5",
+      brightBlack: "#666666",
+      brightRed: "#f14c4c",
+      brightGreen: "#23d18b",
+      brightYellow: "#f5f543",
+      brightBlue: "#3b8eea",
+      brightMagenta: "#d670d6",
+      brightCyan: "#29b8db",
+      brightWhite: "#e5e5e5",
+    },
+  },
+} as const satisfies Theme;
+
 // ── GitHub Dark ────────────────────────────────────────────────────────────
 const githubDark = {
   id: "github-dark",
@@ -980,6 +1037,7 @@ const oneLight = {
 // ── Exports ────────────────────────────────────────────────────────────────
 
 export const themeList = [
+  vscodeDark,
   githubDark,
   nyaHighContrast,
   dracula,
@@ -1006,4 +1064,4 @@ export const themes = Object.fromEntries(themeList.map((theme) => [theme.id, the
 > &
   Record<string, Theme | undefined>;
 
-export const DEFAULT_THEME_ID = "github-dark" satisfies ThemeId;
+export const DEFAULT_THEME_ID = "vscode-dark" satisfies ThemeId;
