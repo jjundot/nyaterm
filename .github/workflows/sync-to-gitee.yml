@@ -138,17 +138,51 @@ jobs:
             fi
 
             filename=$(basename "$file_path")
+            filesize=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || echo "unknown")
 
-            echo "Uploading: $filename"
+            echo "----------------------------------------"
+            echo "Uploading: $filename (size: $filesize bytes)"
+            echo "----------------------------------------"
 
-            curl -fsSL -X POST \
-              "${GITEE_API}/repos/${GITEE_REPO}/releases/${RELEASE_ID}/attach_files" \
-              -F "access_token=${GITEE_TOKEN}" \
-              -F "file=@${file_path}" \
-              || echo "Warning: Failed to upload $filename (may already exist)"
+            # 使用 --max-time 300 (5分钟超时)，显示进度，最多重试 2 次
+            for attempt in 1 2 3; do
+              HTTP_CODE=$(curl -sL -w "%{http_code}" -o /tmp/upload_response.json \
+                --max-time 300 \
+                --progress-bar \
+                -X POST \
+                "${GITEE_API}/repos/${GITEE_REPO}/releases/${RELEASE_ID}/attach_files" \
+                -F "access_token=${GITEE_TOKEN}" \
+                -F "file=@${file_path}")
+
+              if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
+                echo "✓ Uploaded successfully"
+                break
+              elif [ "$HTTP_CODE" = "400" ]; then
+                RESPONSE=$(cat /tmp/upload_response.json 2>/dev/null || echo "")
+                if echo "$RESPONSE" | grep -q "already exists\|已存在"; then
+                  echo "⚠ File already exists, skipping"
+                  break
+                else
+                  echo "✗ Upload failed with HTTP $HTTP_CODE (attempt $attempt/3)"
+                  echo "Response: $RESPONSE"
+                  if [ $attempt -lt 3 ]; then
+                    echo "Retrying in 5 seconds..."
+                    sleep 5
+                  fi
+                fi
+              else
+                echo "✗ Upload failed with HTTP $HTTP_CODE (attempt $attempt/3)"
+                cat /tmp/upload_response.json 2>/dev/null || true
+                if [ $attempt -lt 3 ]; then
+                  echo "Retrying in 5 seconds..."
+                  sleep 5
+                fi
+              fi
+            done
           done
 
-          echo "✓ All assets uploaded to Gitee release ${TAG}"
+          echo ""
+          echo "✓ All assets processed for Gitee release ${TAG}"
 
       - name: Generate Gitee latest.json
         env:
