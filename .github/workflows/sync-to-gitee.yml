@@ -87,15 +87,28 @@ jobs:
                 prerelease: false
               }')
 
-            RELEASE_RESPONSE=$(curl -fsSL -X POST \
+            echo "Payload preview:"
+            echo "$PAYLOAD" | jq -C
+
+            # 移除 -f 以便看到错误响应
+            HTTP_CODE=$(curl -sL -w "%{http_code}" -o /tmp/gitee_response.json -X POST \
               "${GITEE_API}/repos/${GITEE_REPO}/releases?access_token=${GITEE_TOKEN}" \
               -H "Content-Type: application/json" \
               -d "$PAYLOAD")
 
+            RELEASE_RESPONSE=$(cat /tmp/gitee_response.json)
+
+            if [ "$HTTP_CODE" -ge 400 ]; then
+              echo "Error: Gitee API returned HTTP $HTTP_CODE"
+              echo "Response:"
+              echo "$RELEASE_RESPONSE" | jq -C 2>/dev/null || echo "$RELEASE_RESPONSE"
+              exit 1
+            fi
+
             RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id // empty')
 
             if [ -z "$RELEASE_ID" ]; then
-              echo "Error: Failed to create Gitee release"
+              echo "Error: Failed to extract release ID from response"
               echo "Response: $RELEASE_RESPONSE"
               exit 1
             fi
