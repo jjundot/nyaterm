@@ -8,9 +8,11 @@ import {
   MdDeleteSweep,
   MdLink,
   MdMoreVert,
+  MdRefresh,
   MdSearch,
   MdSort,
   MdSortByAlpha,
+  MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
 import ClearAllDialog from "@/components/dialog/connections/ClearAllDialog";
@@ -102,6 +104,27 @@ export default function SavedConnections({
   } = useApp();
   const { t } = useTranslation();
   const { handleExport, passwordAlert } = useConfigTransfer();
+
+  // ── Sync state ────────────────────────────────────────────────────────────
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const hasMasterPassword = Boolean(appSettings.security.master_password);
+  const syncEnabled = appSettings.cloud_sync.enabled;
+
+  const canSync = hasMasterPassword && syncEnabled;
+
+  const handleSyncPush = async () => {
+    if (!canSync || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await invoke("sync_push_now");
+      toast.success(t("settings.syncPushSuccess"));
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // ── UI state ──────────────────────────────────────────────────────────────
   // Tracks in-flight connections to prevent duplicate invocations (not shown in UI)
@@ -1015,11 +1038,28 @@ export default function SavedConnections({
         <PanelHeader
           title={t("panel.savedConnections")}
           actions={
-            savedConnections.length > 0 ? (
-              <span className="text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
-                {savedConnections.length}
-              </span>
-            ) : null
+            <div className="flex items-center gap-2">
+              {canSync && (
+                <HeaderActionButton
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 h-6 w-6 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
+                  style={{ color: "var(--df-text-muted)" }}
+                  tooltip={t("settings.syncPushNow")}
+                  onClick={() => void handleSyncPush()}
+                  disabled={isSyncing}
+                >
+                  <MdUpload
+                    className={isSyncing ? "animate-spin text-xs" : "text-xs"}
+                  />
+                </HeaderActionButton>
+              )}
+              {savedConnections.length > 0 ? (
+                <span className="text-[0.6875rem]" style={{ color: "var(--df-text-dimmed)" }}>
+                  {savedConnections.length}
+                </span>
+              ) : null}
+            </div>
           }
         />
 

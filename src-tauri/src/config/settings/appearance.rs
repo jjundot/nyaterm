@@ -39,7 +39,7 @@ pub struct AppearanceSettings {
 }
 
 fn default_app_theme() -> String {
-    "github-dark".to_string()
+    "vscode-dark".to_string()
 }
 fn default_font() -> String {
     DEFAULT_TERMINAL_FONT_FAMILY.to_string()

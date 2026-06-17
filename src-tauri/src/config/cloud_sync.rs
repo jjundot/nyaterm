@@ -23,9 +23,9 @@ pub struct WebdavSyncSettings {
 impl Default for WebdavSyncSettings {
     fn default() -> Self {
         Self {
-            endpoint: String::new(),
-            root: String::new(),
-            username: String::new(),
+            endpoint: "http://172.30.13.80:5000".to_string(),
+            root: "/apps".to_string(),
+            username: "reader".to_string(),
             password: None,
         }
     }
