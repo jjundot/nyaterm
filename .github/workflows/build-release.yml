@@ -188,7 +188,9 @@ jobs:
           const runnerTemp = process.env.RUNNER_TEMP || os.tmpdir();
           const keyPath = path.join(runnerTemp, 'tauri-updater.key');
 
-          fs.writeFileSync(keyPath, Buffer.from(keyB64, 'base64'));
+          // Decode base64 to text (not binary) - the key file is a text file with 2 lines
+          const keyText = Buffer.from(keyB64, 'base64').toString('utf8');
+          fs.writeFileSync(keyPath, keyText, 'utf8');
           fs.appendFileSync(process.env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY=${keyPath}\n`);
 
           // Only set password env var if it's actually defined and non-empty
