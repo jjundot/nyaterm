@@ -75,19 +75,32 @@ jobs:
           if [ "$RELEASE_EXISTS" = "null" ]; then
             echo "Creating new Gitee release: ${TAG}"
 
-            RELEASE_RESPONSE=$(curl -fsSL -X POST \
-              "${GITEE_API}/repos/${GITEE_REPO}/releases" \
-              -H "Content-Type: application/json" \
-              -d "{
-                \"access_token\": \"${GITEE_TOKEN}\",
-                \"tag_name\": \"${TAG}\",
-                \"name\": \"${RELEASE_NAME}\",
-                \"body\": \"${RELEASE_BODY}\",
-                \"prerelease\": false,
-                \"target_commitish\": \"main\"
-              }")
+            # 使用 jq 构建 JSON payload 以正确处理特殊字符
+            PAYLOAD=$(jq -n \
+              --arg tag "$TAG" \
+              --arg name "$RELEASE_NAME" \
+              --arg body "$RELEASE_BODY" \
+              '{
+                tag_name: $tag,
+                name: $name,
+                body: $body,
+                prerelease: false
+              }')
 
-            RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
+            RELEASE_RESPONSE=$(curl -fsSL -X POST \
+              "${GITEE_API}/repos/${GITEE_REPO}/releases?access_token=${GITEE_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+
+            RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id // empty')
+
+            if [ -z "$RELEASE_ID" ]; then
+              echo "Error: Failed to create Gitee release"
+              echo "Response: $RELEASE_RESPONSE"
+              exit 1
+            fi
+
+            echo "Created Gitee release with ID: ${RELEASE_ID}"
           else
             echo "Gitee release already exists: ${TAG}"
             RELEASE_ID="$RELEASE_EXISTS"

@@ -573,3 +573,34 @@ jobs:
             }
 
             console.log(`Deleted ${sigAssets.length} .sig file(s).`);
+
+  trigger-gitee-sync:
+    name: Trigger Gitee sync
+    needs: cleanup-sigs
+    runs-on: ubuntu-latest
+
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      actions: write
+
+    steps:
+      - name: Trigger Gitee sync workflow
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+
+            console.log(`Triggering Gitee sync for tag: ${tag}`);
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'sync-to-gitee.yml',
+              ref: 'main',
+              inputs: {
+                tag: tag,
+              },
+            });
+
+            console.log(`✓ Gitee sync workflow dispatched for ${tag}`);
