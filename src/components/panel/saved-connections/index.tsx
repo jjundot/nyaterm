@@ -6,12 +6,12 @@ import {
   MdClose,
   MdCreateNewFolder,
   MdDeleteSweep,
+  MdDownload,
   MdLink,
   MdMoreVert,
   MdSearch,
   MdSort,
   MdSortByAlpha,
-  MdUpload,
 } from "react-icons/md";
 import { toast } from "sonner";
 import ClearAllDialog from "@/components/dialog/connections/ClearAllDialog";
@@ -112,12 +112,12 @@ export default function SavedConnections({
 
   const canSync = hasMasterPassword && syncEnabled;
 
-  const handleSyncPush = async () => {
+  const handleSyncPull = async () => {
     if (!canSync || isSyncing) return;
     setIsSyncing(true);
     try {
-      await invoke("sync_push_now");
-      toast.success(t("settings.syncPushSuccess"));
+      await invoke("sync_pull_now");
+      toast.success(t("settings.syncPullSuccess"));
     } catch (e) {
       toast.error(getErrorMessage(e));
     } finally {
@@ -1044,11 +1044,11 @@ export default function SavedConnections({
                   size="icon-sm"
                   className="shrink-0 h-6 w-6 rounded-md p-0 transition-colors hover:bg-[var(--df-bg-hover)]"
                   style={{ color: "var(--df-text-muted)" }}
-                  tooltip={t("settings.syncPushNow")}
-                  onClick={() => void handleSyncPush()}
+                  tooltip={t("settings.syncPullNow")}
+                  onClick={() => void handleSyncPull()}
                   disabled={isSyncing}
                 >
-                  <MdUpload
+                  <MdDownload
                     className={isSyncing ? "animate-spin text-xs" : "text-xs"}
                   />
                 </HeaderActionButton>
