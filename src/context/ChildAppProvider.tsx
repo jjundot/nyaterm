@@ -24,8 +24,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   appearance: {
     theme: "github-dark",
     terminal_theme: "default",
-    font_family: 'JetBrains Mono, Consolas, "Cascadia Mono", monospace',
-    ui_font_family: 'JetBrains Mono, "Noto Sans SC Variable", Inter, sans-serif',
+    font_family: 'Consolas, "Courier New", monospace, "Noto Sans SC"',
+    ui_font_family: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif',
     font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,

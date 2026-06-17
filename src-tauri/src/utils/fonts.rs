@@ -5,9 +5,9 @@ use font_kit::source::SystemSource;
 use serde::Serialize;
 
 pub const DEFAULT_TERMINAL_FONT_FAMILY: &str =
-    "JetBrains Mono, Consolas, \"Cascadia Mono\", monospace";
+    "Consolas, \"Courier New\", monospace, \"Noto Sans SC\"";
 pub const DEFAULT_UI_FONT_FAMILY: &str =
-    "JetBrains Mono, \"Noto Sans SC Variable\", Inter, sans-serif";
+    "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, \"Noto Sans SC\", sans-serif";
 
 const BUILT_IN_MONOSPACE_FONTS: &[&str] = &["JetBrains Mono"];
 const GENERIC_MONOSPACE_FAMILY: &str = "monospace";
