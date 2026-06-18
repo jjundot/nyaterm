@@ -178,9 +178,10 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     confirm_on_close: true,
   },
   appearance: {
-    theme: "github-dark",
+    theme: "vscode-dark",
     font_family: 'Consolas, "Courier New", monospace, "Noto Sans SC"',
-    ui_font_family: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif',
+    ui_font_family:
+      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif',
     font_size: DEFAULT_TERMINAL_FONT_SIZE,
     ligatures: false,
     background_opacity: 1.0,
@@ -243,8 +244,8 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     show_multi_line_paste_dialog: true,
   },
   interaction: {
-    copy_on_select: false,
-    right_click_paste: false,
+    copy_on_select: true,
+    right_click_paste: true,
     command_suggestions_enabled: true,
     command_suggestion_min_chars: DEFAULT_COMMAND_SUGGESTION_MIN_CHARS,
     command_suggestion_max_chars: DEFAULT_COMMAND_SUGGESTION_MAX_CHARS,

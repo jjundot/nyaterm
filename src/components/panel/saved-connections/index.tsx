@@ -170,7 +170,7 @@ export default function SavedConnections({
   );
 
   // ── Derived tree ──────────────────────────────────────────────────────────
-  const { rootNodes, ungrouped } = useMemo(() => {
+  const { sharedRootNodes, privateRootNodes, ungrouped } = useMemo(() => {
     const filtered = keyword
       ? savedConnections.filter(
           (c) =>
@@ -211,11 +211,17 @@ export default function SavedConnections({
       map[g.id] = { group: g, children: [], connections: connByGroup[g.id] || [], totalCount: 0 };
     }
 
-    const roots: GroupNode[] = [];
+    const sharedRoots: GroupNode[] = [];
+    const privateRoots: GroupNode[] = [];
     for (const g of sortedGroups) {
       const node = map[g.id];
-      if (g.parent_id && map[g.parent_id]) map[g.parent_id].children.push(node);
-      else roots.push(node);
+      if (g.parent_id && map[g.parent_id]) {
+        map[g.parent_id].children.push(node);
+      } else if (g.sync_type === "shared") {
+        sharedRoots.push(node);
+      } else {
+        privateRoots.push(node);
+      }
     }
 
     const computeTotal = (node: GroupNode): number => {
@@ -223,14 +229,19 @@ export default function SavedConnections({
         node.connections.length + node.children.reduce((s, c) => s + computeTotal(c), 0);
       return node.totalCount;
     };
-    roots.forEach(computeTotal);
+    sharedRoots.forEach(computeTotal);
+    privateRoots.forEach(computeTotal);
 
     const prune = (node: GroupNode): boolean => {
       node.children = node.children.filter(prune);
       return node.connections.length > 0 || node.children.length > 0;
     };
 
-    return { rootNodes: keyword ? roots.filter(prune) : roots, ungrouped: noGroup };
+    return {
+      sharedRootNodes: keyword ? sharedRoots.filter(prune) : sharedRoots,
+      privateRootNodes: keyword ? privateRoots.filter(prune) : privateRoots,
+      ungrouped: noGroup,
+    };
   }, [savedConnections, savedGroups, keyword, sortMode]);
 
   useEffect(() => {
@@ -259,7 +270,8 @@ export default function SavedConnections({
       matchingGroupIds.add(node.group.id);
       node.children.forEach(appendNodeIds);
     };
-    rootNodes.forEach(appendNodeIds);
+    sharedRootNodes.forEach(appendNodeIds);
+    privateRootNodes.forEach(appendNodeIds);
 
     const groupIdsToOpen = Array.from(matchingGroupIds).filter(
       (id) => !searchAutoExpandedGroupIdsRef.current.has(id),
@@ -281,7 +293,7 @@ export default function SavedConnections({
       });
       return changed ? next : prev;
     });
-  }, [keyword, rootNodes, expandedGroups]);
+  }, [keyword, sharedRootNodes, privateRootNodes, expandedGroups]);
 
   const visibleConnectionIds = useMemo(() => {
     const ids: string[] = [];
@@ -295,13 +307,14 @@ export default function SavedConnections({
       });
     };
 
-    rootNodes.forEach(appendNodeConnections);
+    sharedRootNodes.forEach(appendNodeConnections);
+    privateRootNodes.forEach(appendNodeConnections);
     ungrouped.forEach((connection) => {
       ids.push(connection.id);
     });
 
     return ids;
-  }, [expandedGroups, rootNodes, ungrouped]);
+  }, [expandedGroups, sharedRootNodes, privateRootNodes, ungrouped]);
 
   const visibleConnectionIdSet = useMemo(
     () => new Set(visibleConnectionIds),
@@ -564,11 +577,21 @@ export default function SavedConnections({
     setFolderDialogOpen(true);
   };
 
-  const handleFolderDialogSubmit = async () => {
+  const handleFolderDialogSubmit = async (options: {
+    syncType: "shared" | "private";
+    allowUpload: boolean;
+  }) => {
     if (!folderDialogName.trim()) return;
     try {
       if (editingGroup) {
-        await invoke("save_group", { group: { ...editingGroup, name: folderDialogName.trim() } });
+        await invoke("save_group", {
+          group: {
+            ...editingGroup,
+            name: folderDialogName.trim(),
+            sync_type: options.syncType,
+            allow_upload: options.allowUpload,
+          },
+        });
       } else {
         await invoke("save_group", {
           group: {
@@ -576,6 +599,8 @@ export default function SavedConnections({
             name: folderDialogName.trim(),
             parent_id: folderDialogParentId || null,
             sort_order: savedGroups.length,
+            sync_type: options.syncType,
+            allow_upload: options.allowUpload,
           },
         });
       }
@@ -1048,9 +1073,7 @@ export default function SavedConnections({
                   onClick={() => void handleSyncPull()}
                   disabled={isSyncing}
                 >
-                  <MdDownload
-                    className={isSyncing ? "animate-spin text-xs" : "text-xs"}
-                  />
+                  <MdDownload className={isSyncing ? "animate-spin text-xs" : "text-xs"} />
                 </HeaderActionButton>
               )}
               {savedConnections.length > 0 ? (
@@ -1190,29 +1213,77 @@ export default function SavedConnections({
                 >
                   {t("panel.noSavedConnections")}
                 </div>
-              ) : rootNodes.length === 0 && ungrouped.length === 0 ? (
-                <div
-                  className="text-center py-4 text-xs"
-                  style={{ color: "var(--df-text-dimmed)" }}
-                >
-                  {t("savedConnections.noResults")}
-                </div>
               ) : (
                 <>
-                  {rootNodes.map((node) => (
-                    <GroupNodeItem key={node.group.id} node={node} depth={0} />
-                  ))}
-                  {ungrouped.length > 0 && rootNodes.length > 0 && (
-                    <div
-                      className="mt-1 pt-1 border-t"
-                      style={{
-                        borderColor: "color-mix(in srgb, var(--df-border) 50%, transparent)",
-                      }}
-                    />
+                  {/* Shared Configurations Section */}
+                  {sharedRootNodes.length > 0 && (
+                    <>
+                      <div
+                        className="px-2 py-1.5 text-xs font-semibold flex items-center gap-2 select-none"
+                        style={{ color: "var(--df-text-muted)" }}
+                      >
+                        <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+                        公用配置
+                      </div>
+                      {sharedRootNodes.map((node) => (
+                        <GroupNodeItem key={node.group.id} node={node} depth={0} />
+                      ))}
+                    </>
                   )}
-                  {ungrouped.map((conn) => (
-                    <ConnectionItem key={conn.id} conn={conn} indented={false} />
-                  ))}
+
+                  {/* Private Configurations Section */}
+                  {(privateRootNodes.length > 0 || ungrouped.length > 0) && (
+                    <>
+                      {sharedRootNodes.length > 0 && (
+                        <div
+                          className="my-1 border-t"
+                          style={{
+                            borderColor: "color-mix(in srgb, var(--df-border) 30%, transparent)",
+                          }}
+                        />
+                      )}
+                      <div
+                        className="px-2 py-1.5 text-xs font-semibold flex items-center gap-2 select-none"
+                        style={{ color: "var(--df-text-muted)" }}
+                      >
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                        私有配置
+                      </div>
+                      {privateRootNodes.map((node) => (
+                        <GroupNodeItem key={node.group.id} node={node} depth={0} />
+                      ))}
+                    </>
+                  )}
+
+                  {/* Ungrouped connections (always private) */}
+                  {ungrouped.length > 0 && (
+                    <>
+                      {(sharedRootNodes.length > 0 || privateRootNodes.length > 0) && (
+                        <div
+                          className="mt-1 pt-1 border-t"
+                          style={{
+                            borderColor: "color-mix(in srgb, var(--df-border) 50%, transparent)",
+                          }}
+                        />
+                      )}
+                      {ungrouped.map((conn) => (
+                        <ConnectionItem key={conn.id} conn={conn} indented={false} />
+                      ))}
+                    </>
+                  )}
+
+                  {/* No results message */}
+                  {sharedRootNodes.length === 0 &&
+                    privateRootNodes.length === 0 &&
+                    ungrouped.length === 0 &&
+                    keyword && (
+                      <div
+                        className="text-center py-4 text-xs"
+                        style={{ color: "var(--df-text-dimmed)" }}
+                      >
+                        {t("savedConnections.noResults")}
+                      </div>
+                    )}
                 </>
               )}
             </div>
@@ -1260,6 +1331,7 @@ export default function SavedConnections({
           open={folderDialogOpen}
           isEditing={!!editingGroup}
           name={folderDialogName}
+          editingGroup={editingGroup}
           onNameChange={setFolderDialogName}
           onSubmit={handleFolderDialogSubmit}
           onCancel={() => setFolderDialogOpen(false)}

@@ -669,14 +669,22 @@ fn zip_error(error: impl std::fmt::Display) -> AppError {
     AppError::Config(format!("portable snapshot zip error: {error}"))
 }
 
-/// Filters out groups marked as `exclude_from_sync` and their connections.
+/// Filters out groups marked as `exclude_from_sync`, private groups, and shared groups
+/// where `allow_upload` is false (when uploading).
 fn filter_sync_excluded_data(sessions: &config::SessionsConfig) -> config::SessionsConfig {
     use std::collections::HashSet;
 
     let excluded_group_ids: HashSet<String> = sessions
         .groups
         .iter()
-        .filter(|g| g.exclude_from_sync)
+        .filter(|g| {
+            // Exclude groups explicitly marked for exclusion
+            g.exclude_from_sync ||
+            // Exclude private groups
+            g.sync_type == config::GroupSyncType::Private ||
+            // Exclude shared groups that don't allow upload
+            (g.sync_type == config::GroupSyncType::Shared && !g.allow_upload)
+        })
         .map(|g| g.id.clone())
         .collect();
 
@@ -727,24 +735,28 @@ fn filter_sync_excluded_data(sessions: &config::SessionsConfig) -> config::Sessi
 }
 
 /// Merges remote snapshot data with local sync-excluded groups and connections.
+/// Keeps local private groups and only updates shared groups from remote.
 fn merge_sync_excluded_data(
     local: &config::SessionsConfig,
     remote: &config::SessionsConfig,
 ) -> config::SessionsConfig {
     use std::collections::HashSet;
 
-    let excluded_group_ids: HashSet<String> = local
+    // Local groups to preserve: private groups and excluded groups
+    let preserved_group_ids: HashSet<String> = local
         .groups
         .iter()
-        .filter(|g| g.exclude_from_sync)
+        .filter(|g| {
+            g.exclude_from_sync ||
+            g.sync_type == config::GroupSyncType::Private ||
+            // Keep shared groups locally modified with upload disabled
+            (g.sync_type == config::GroupSyncType::Shared && !g.allow_upload)
+        })
         .map(|g| g.id.clone())
         .collect();
 
-    if excluded_group_ids.is_empty() {
-        return remote.clone();
-    }
-
-    let mut all_excluded_ids = excluded_group_ids.clone();
+    // Collect all child groups of preserved groups
+    let mut all_preserved_ids = preserved_group_ids.clone();
     loop {
         let children: HashSet<String> = local
             .groups
@@ -752,39 +764,56 @@ fn merge_sync_excluded_data(
             .filter(|g| {
                 g.parent_id
                     .as_ref()
-                    .is_some_and(|pid| all_excluded_ids.contains(pid))
+                    .is_some_and(|pid| all_preserved_ids.contains(pid))
             })
             .map(|g| g.id.clone())
             .collect();
         if children.is_empty() {
             break;
         }
-        all_excluded_ids.extend(children);
+        all_preserved_ids.extend(children);
     }
 
-    let local_excluded_groups: Vec<_> = local
+    // Collect preserved local groups and their connections
+    let local_preserved_groups: Vec<_> = local
         .groups
         .iter()
-        .filter(|g| all_excluded_ids.contains(&g.id))
+        .filter(|g| all_preserved_ids.contains(&g.id))
         .cloned()
         .collect();
 
-    let local_excluded_connections: Vec<_> = local
+    let local_preserved_connections: Vec<_> = local
         .connections
         .iter()
         .filter(|c| {
             c.group_id
                 .as_ref()
-                .is_some_and(|gid| all_excluded_ids.contains(gid))
+                .map_or(false, |gid| all_preserved_ids.contains(gid))
         })
         .cloned()
         .collect();
 
-    let mut groups = remote.groups.clone();
-    groups.extend(local_excluded_groups);
+    // Remote groups to keep: shared groups (unless locally preserved)
+    let mut groups: Vec<_> = remote
+        .groups
+        .iter()
+        .filter(|g| !all_preserved_ids.contains(&g.id))
+        .cloned()
+        .collect();
+    groups.extend(local_preserved_groups);
 
-    let mut connections = remote.connections.clone();
-    connections.extend(local_excluded_connections);
+    // Remote connections to keep: connections in non-preserved groups
+    let mut connections: Vec<_> = remote
+        .connections
+        .iter()
+        .filter(|c| {
+            c.group_id
+                .as_ref()
+                .map_or(true, |gid| !all_preserved_ids.contains(gid))
+        })
+        .cloned()
+        .collect();
+    connections.extend(local_preserved_connections);
 
     config::SessionsConfig {
         groups,
@@ -998,6 +1027,7 @@ mod tests {
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: false,
+                ..Default::default()
             },
             config::Group {
                 id: "g2".to_string(),
@@ -1007,6 +1037,7 @@ mod tests {
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: true,
+                ..Default::default()
             },
             config::Group {
                 id: "g3".to_string(),
@@ -1016,6 +1047,7 @@ mod tests {
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: false,
+                ..Default::default()
             },
         ];
         sessions.connections = vec![
@@ -1098,6 +1130,7 @@ mod tests {
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: false,
+                ..Default::default()
             },
             config::Group {
                 id: "g2".to_string(),
@@ -1107,6 +1140,7 @@ mod tests {
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: true,
+                ..Default::default()
             },
         ];
         local.connections = vec![config::SavedConnection {
@@ -1138,6 +1172,7 @@ mod tests {
             created_at_ms: None,
             updated_at_ms: None,
             exclude_from_sync: false,
+            ..Default::default()
         }];
         remote.connections = vec![config::SavedConnection {
             id: "c3".to_string(),

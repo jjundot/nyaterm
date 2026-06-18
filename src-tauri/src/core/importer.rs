@@ -2,7 +2,7 @@
 //! and NyaTerm JSON files.
 
 use crate::config::{
-    self, AiExecutionProfile, ConnectionAuth, ConnectionType, Group, SavedConnection,
+    self, AiExecutionProfile, ConnectionAuth, ConnectionType, Group, GroupSyncType, SavedConnection,
 };
 use crate::error::{AppError, AppResult};
 use crate::utils::crypto;
@@ -1018,6 +1018,8 @@ fn ensure_group_path(
                 created_at_ms: None,
                 updated_at_ms: None,
                 exclude_from_sync: false,
+                sync_type: GroupSyncType::default(),
+                allow_upload: false,
             });
             *next_sort += 1;
             path_map.insert(prefix, id.clone());

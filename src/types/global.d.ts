@@ -102,6 +102,9 @@ export type SshAuth =
   | { type: "password"; password: string }
   | { type: "key"; key_data: string; cert_data?: string | null; passphrase?: string };
 
+/** Group sync type: shared (公用) or private (私有). */
+export type GroupSyncType = "shared" | "private";
+
 /** Group for organizing saved connections. Groups form a tree via parent_id. */
 export interface Group {
   id: string;
@@ -110,6 +113,10 @@ export interface Group {
   sort_order: number;
   /** When true, this group and its contents are excluded from cloud sync. */
   exclude_from_sync?: boolean;
+  /** Sync type: shared (公用) or private (私有). */
+  sync_type?: GroupSyncType;
+  /** For shared groups: whether to allow uploading changes to cloud. */
+  allow_upload?: boolean;
 }
 
 /** Managed SSH private key stored in local app storage. */

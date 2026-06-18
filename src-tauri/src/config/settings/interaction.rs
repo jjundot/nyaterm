@@ -40,8 +40,8 @@ fn default_true() -> bool {
 impl Default for InteractionSettings {
     fn default() -> Self {
         Self {
-            copy_on_select: false,
-            right_click_paste: false,
+            copy_on_select: true,
+            right_click_paste: true,
             command_suggestions_enabled: true,
             command_suggestion_min_chars: default_command_suggestion_min_chars(),
             command_suggestion_max_chars: default_command_suggestion_max_chars(),

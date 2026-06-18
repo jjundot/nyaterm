@@ -26,6 +26,7 @@ fn sample_group(id: &str, sort_order: i32) -> Group {
         created_at_ms: None,
         updated_at_ms: None,
         exclude_from_sync: false,
+        ..Default::default()
     }
 }
 fn sample_connection(id: &str, group_id: Option<&str>, sort_order: i32) -> SavedConnection {

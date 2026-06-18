@@ -797,11 +797,9 @@ impl CloudSyncManager {
             return Err(AppError::Config("Cloud sync conflict detected".to_string()));
         }
 
-        if !remote_changed && !force {
-            return Err(AppError::Config(
-                "No newer remote sync snapshot is available".to_string(),
-            ));
-        }
+        // If we get here, hashes don't match and it's not a conflict
+        // Proceed to pull even if remote_changed is false, as it might be a hash calculation change
+        // or local changes that don't affect the sync hash (private groups)
 
         let snapshot_path = remote_path(
             &settings.remote_root,

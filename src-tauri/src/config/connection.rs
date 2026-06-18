@@ -191,9 +191,25 @@ pub struct SavedConnection {
     pub last_used_at_ms: Option<u64>,
 }
 
+/// Group sync type: shared (公用) or private (私有).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupSyncType {
+    /// Shared configuration: read-only from cloud by default.
+    Shared,
+    /// Private configuration: local-only, not synced.
+    Private,
+}
+
+impl Default for GroupSyncType {
+    fn default() -> Self {
+        Self::Private
+    }
+}
+
 /// Group for organizing saved connections in the UI.
 /// Groups form a tree via `parent_id`; root groups have `parent_id = None`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Group {
     #[serde(default = "uuid_v4")]
     pub id: String,
@@ -209,6 +225,12 @@ pub struct Group {
     /// When true, this group and its contents are excluded from cloud sync.
     #[serde(default, skip_serializing_if = "is_false")]
     pub exclude_from_sync: bool,
+    /// Sync type: shared (公用) or private (私有).
+    #[serde(default)]
+    pub sync_type: GroupSyncType,
+    /// For shared groups: whether to allow uploading changes to cloud.
+    #[serde(default)]
+    pub allow_upload: bool,
 }
 
 /// Root config for groups and saved connections.
