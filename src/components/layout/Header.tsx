@@ -494,12 +494,12 @@ export default function Header({
 
   return (
     <header
-      className="h-10 border-b flex items-center gap-2 px-2 select-none shrink-0"
-      style={{ backgroundColor: "var(--df-bg-header)", borderColor: "var(--df-border)" }}
+      className="border-b flex items-center gap-2 px-2 select-none shrink-0"
+      style={{ height: "30px", backgroundColor: "var(--df-bg-header)", borderColor: "var(--df-border)" }}
     >
       <div className={`flex items-center gap-2 shrink-0${isMacOS ? " pl-[70px]" : ""}`}>
         {!isMacOS && (
-          <NyaTermLogo className="h-5 w-5 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
+          <NyaTermLogo className="h-4 w-4 shrink-0" onDoubleClick={handleToggleMaximizeWindow} />
         )}
 
         {!isMacOS && (
@@ -518,7 +518,7 @@ export default function Header({
           {menuKeys.map(({ key, label }) => (
             <MenubarMenu key={key}>
               <MenubarTrigger
-                className="relative cursor-default px-2.5 py-1 text-xs font-medium rounded-md transition-colors text-[var(--df-text-muted)] data-[state=open]:text-[var(--df-primary)] data-[state=open]:bg-[color-mix(in_srgb,var(--df-primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] focus:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] focus:text-[var(--df-text-muted)] data-[state=open]:focus:bg-[color-mix(in_srgb,var(--df-primary)_10%,transparent)] data-[state=open]:focus:text-[var(--df-primary)] outline-none"
+                className="relative cursor-default px-2 py-0.5 text-xs font-medium rounded-md transition-colors text-[var(--df-text-muted)] data-[state=open]:text-[var(--df-primary)] data-[state=open]:bg-[color-mix(in_srgb,var(--df-primary)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] focus:bg-[color-mix(in_srgb,var(--df-text-muted)_10%,transparent)] focus:text-[var(--df-text-muted)] data-[state=open]:focus:bg-[color-mix(in_srgb,var(--df-primary)_10%,transparent)] data-[state=open]:focus:text-[var(--df-primary)] outline-none"
                 {...(key === "help" && showUpdateDot ? { onClick: onHelpMenuOpen } : {})}
               >
                 {label}
@@ -597,7 +597,7 @@ export default function Header({
             <Button
               type="button"
               variant="ghost"
-              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              className="rounded-none h-full w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
               aria-label={isAlwaysOnTop ? t("menu.unpinWindow") : t("menu.pinWindow")}
               onClick={handleToggleAlwaysOnTop}
             >
@@ -611,7 +611,7 @@ export default function Header({
             <Button
               type="button"
               variant="ghost"
-              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              className="rounded-none h-full w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
               aria-label={t("menu.minimize")}
               onClick={handleMinimizeWindow}
             >
@@ -621,7 +621,7 @@ export default function Header({
             <Button
               type="button"
               variant="ghost"
-              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
+              className="rounded-none h-full w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[color-mix(in_srgb,var(--df-text)_10%,transparent)] hover:!text-[var(--df-text)]"
               aria-label={isMaximized ? t("menu.restore") : t("menu.maximize")}
               onClick={handleToggleMaximizeWindow}
             >
@@ -635,7 +635,7 @@ export default function Header({
             <Button
               type="button"
               variant="ghost"
-              className="rounded-none h-10 w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[#e81123] hover:!text-white"
+              className="rounded-none h-full w-[46px] px-0 text-[var(--df-text-muted)] transition-colors hover:!bg-[#e81123] hover:!text-white"
               aria-label={t("common.close")}
               onClick={handleCloseWindow}
             >

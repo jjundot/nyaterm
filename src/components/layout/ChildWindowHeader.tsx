@@ -14,8 +14,8 @@ export default function ChildWindowHeader({ title, onClose, icon }: ChildWindowH
 
   return (
     <header
-      className="h-10 border-b flex items-center gap-2 px-2 shrink-0 select-none"
-      style={{ backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
+      className="border-b flex items-center gap-2 px-2 shrink-0 select-none"
+      style={{ height: "30px", backgroundColor: "var(--df-bg-panel)", borderColor: "var(--df-border)" }}
     >
       <div
         className={`flex-1 min-w-0 h-full flex items-center gap-2 px-2${isMacOS ? " pl-[70px]" : ""}`}
